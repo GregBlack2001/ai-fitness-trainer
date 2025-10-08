@@ -1,15 +1,40 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
 
 export function Navigation() {
   const pathname = usePathname()
-  
-  // Don't show nav on auth pages
+  const router = useRouter()
+  const supabase = createClient()
+  const [user, setUser] = useState<any>(null)
+
+  // IMPORTANT: Always call hooks BEFORE any conditional returns
+  useEffect(() => {
+    // Get current user
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user)
+    })
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [supabase])
+
+  // NOW it's safe to return early after hooks are called
   if (pathname === '/login' || pathname === '/signup') {
     return null
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/')
   }
 
   return (
@@ -20,23 +45,34 @@ export function Navigation() {
         </Link>
         
         <div className="flex items-center gap-4">
-          <Link href="/dashboard">
-            <Button variant="ghost">Dashboard</Button>
-          </Link>
-          <Link href="/chat">
-            <Button variant="ghost">Chat</Button>
-          </Link>
-          <Link href="/plan">
-            <Button variant="ghost">My Plan</Button>
-          </Link>
-          <Link href="/progress">
-            <Button variant="ghost">Progress</Button>
-          </Link>
-          
-          {/* Auth buttons - we'll make these functional later */}
-          <Link href="/login">
-            <Button variant="outline">Login</Button>
-          </Link>
+          {user ? (
+            <>
+              <Link href="/dashboard">
+                <Button variant="ghost">Dashboard</Button>
+              </Link>
+              <Link href="/chat">
+                <Button variant="ghost">Chat</Button>
+              </Link>
+              <Link href="/plan">
+                <Button variant="ghost">My Plan</Button>
+              </Link>
+              <Link href="/progress">
+                <Button variant="ghost">Progress</Button>
+              </Link>
+              <Button variant="outline" onClick={handleLogout}>
+                Logout
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button variant="ghost">Login</Button>
+              </Link>
+              <Link href="/signup">
+                <Button>Sign Up</Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>

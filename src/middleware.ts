@@ -1,7 +1,19 @@
-import { type NextRequest } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { updateSession } from './lib/supabase/middleware'
 
 export async function middleware(request: NextRequest) {
+  // Allow API routes to pass through without auth check
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
+
+  // Allow public routes
+  const publicRoutes = ['/', '/login', '/signup']
+  if (publicRoutes.includes(request.nextUrl.pathname)) {
+    return NextResponse.next()
+  }
+
+  // For all other routes, check auth
   return await updateSession(request)
 }
 
