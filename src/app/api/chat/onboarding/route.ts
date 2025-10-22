@@ -203,7 +203,7 @@ export async function POST(request: Request) {
     // make another call to get the actual response
     if (!assistantMessage.content && toolCalls?.length) {
       console.log(
-        "⚠️ AI called function but no message. Making follow-up call..."
+        " AI called function but no message. Making follow-up call..."
       );
 
       const followUpMessages = [

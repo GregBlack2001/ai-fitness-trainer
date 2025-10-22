@@ -5,14 +5,21 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ChatInterface } from "@/components/chat-interface";
 import { Loader2 } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 export default function OnboardingPage() {
   const router = useRouter();
   const supabase = createClient();
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
 
-  // Get the current user on page load
   useEffect(() => {
     const getUser = async () => {
       const {
@@ -20,7 +27,6 @@ export default function OnboardingPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        // Not logged in, redirect to login
         router.push("/login");
         return;
       }
@@ -32,9 +38,28 @@ export default function OnboardingPage() {
     getUser();
   }, [router, supabase]);
 
-  // Called when onboarding is complete
-  const handleComplete = () => {
-    router.push("/dashboard");
+  const handleComplete = async () => {
+    console.log("Onboarding complete! Generating workout plan...");
+    setGeneratingPlan(true);
+
+    try {
+      const response = await fetch("/api/plan/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log("✅ Workout plan generated!");
+      }
+    } catch (error) {
+      console.error("Error generating plan:", error);
+    } finally {
+      // Redirect to dashboard regardless
+      router.push("/dashboard");
+    }
   };
 
   if (loading) {
@@ -45,8 +70,30 @@ export default function OnboardingPage() {
     );
   }
 
+  if (generatingPlan) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Creating Your Personalized Plan...</CardTitle>
+            <CardDescription>
+              Our AI coach is analyzing your profile and designing a workout
+              plan just for you
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center gap-4">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground text-center">
+              This usually takes 10-15 seconds
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!userId) {
-    return null; // Will redirect to login
+    return null;
   }
 
   return (
