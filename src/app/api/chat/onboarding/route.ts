@@ -6,24 +6,38 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-// --- System prompt ---
-const SYSTEM_PROMPT = `You are an enthusiastic and knowledgeable AI fitness coach helping a new user set up their profile.
-Collect this info naturally, one question at a time:
-1. Full name  2. Age  3. Gender  4. Height (cm)  5. Weight (kg)
-6. Fitness goal  7. Fitness level  8. Available days  9. Equipment access 10. Injuries/limitations
+const SYSTEM_PROMPT = `You are an AI fitness coach. Your ONLY job is to:
+1. Ask the user for information
+2. Call update_profile with ANY data they provide
+3. Ask the next question
 
-Guidelines:
-- Be friendly and concise (2–3 sentences max)
-- If user provides multiple details, confirm them all
-- Extract details naturally from sentences
-- When all info is gathered, say “Perfect! I have everything I need. Let me create your personalized plan...” and call complete_onboarding`;
+YOU MUST call update_profile every single time the user gives you information.
+
+Example:
+User: "I weigh 75kg"
+You: Call update_profile(weight_kg=75) AND say "Got it! What's your fitness goal?"
+
+Required data to collect:
+- full_name (string)
+- age (number)
+- gender (string)  
+- height_cm (number - height in centimeters)
+- weight_kg (number - weight in kilograms)
+- fitness_goal (string - e.g., "lose weight", "build muscle")
+- fitness_level (string - must be "beginner", "intermediate", or "advanced")
+- available_days (array of day names - e.g., ["Monday", "Wednesday", "Friday"])
+- equipment_access (string - description of available equipment)
+- injuries (array of strings - list any injuries, or empty array if none)
+
+After getting ALL data, call complete_onboarding.`;
 
 const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "save_basic_info",
-      description: "Save basic user information",
+      name: "update_profile",
+      description:
+        "Update user profile with any extracted information. Call immediately when you get ANY data.",
       parameters: {
         type: "object",
         properties: {
@@ -32,42 +46,13 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           gender: { type: "string" },
           height_cm: { type: "number" },
           weight_kg: { type: "number" },
-        },
-        required: ["full_name", "age", "gender", "height_cm", "weight_kg"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "save_fitness_info",
-      description: "Save fitness details",
-      parameters: {
-        type: "object",
-        properties: {
           fitness_goal: { type: "string" },
           fitness_level: {
             type: "string",
             enum: ["beginner", "intermediate", "advanced"],
           },
-          available_days: {
-            type: "array",
-            items: { type: "string" },
-          },
-        },
-        required: ["fitness_goal", "fitness_level"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "save_equipment_and_injuries",
-      description: "Save user equipment and injuries",
-      parameters: {
-        type: "object",
-        properties: {
-          equipment_access: { type: "object" },
+          available_days: { type: "array", items: { type: "string" } },
+          equipment_access: { type: "string" },
           injuries: { type: "array", items: { type: "string" } },
         },
       },
@@ -77,7 +62,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "complete_onboarding",
-      description: "Mark onboarding complete",
+      description: "Call when ALL information is collected",
       parameters: {
         type: "object",
         properties: { ready: { type: "boolean" } },
@@ -91,26 +76,53 @@ export async function POST(request: Request) {
   try {
     const { messages, userId } = await request.json();
 
-    if (!userId)
+    console.log("=== ONBOARDING CHAT REQUEST ===");
+    console.log("User ID:", userId);
+    console.log("Message count:", messages.length);
+
+    if (!userId) {
       return NextResponse.json({ error: "User ID required" }, { status: 401 });
+    }
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // ⚡ Use GPT-4o-mini for cheaper onboarding chats
+    // Get the last user message
+    const lastMessage = messages[messages.length - 1]?.content || "";
+
+    // Detect if user likely provided data (contains numbers or keywords)
+    const seemsLikeData =
+      /\d+|kg|cm|tall|weigh|male|female|man|woman|beginner|intermediate|advanced|monday|tuesday|wednesday|thursday|friday|saturday|sunday|gym|dumbbell|barbell|equipment|injury|injure/i.test(
+        lastMessage
+      );
+
+    console.log("Last message:", lastMessage);
+    console.log("Seems like data?", seemsLikeData);
+
+    // Choose tool behavior based on whether message contains data
+    let toolChoice: any = "auto";
+    if (seemsLikeData && messages.length > 1) {
+      // Don't force on first message
+      toolChoice = { type: "function", function: { name: "update_profile" } };
+      console.log("🔧 Forcing update_profile function call");
+    }
+
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
       tools,
-      tool_choice: "auto",
+      tool_choice: toolChoice,
       temperature: 0.7,
     });
 
     const assistantMessage = response.choices[0].message;
     const toolCalls = assistantMessage.tool_calls;
 
+    console.log("Tool calls:", toolCalls ? toolCalls.length : 0);
+
+    // Handle function calls
     if (toolCalls?.length) {
       for (const toolCall of toolCalls) {
         if (toolCall.type !== "function") continue;
@@ -120,62 +132,120 @@ export async function POST(request: Request) {
 
         try {
           functionArgs = JSON.parse(toolCall.function.arguments);
-        } catch {
+        } catch (parseError) {
           console.warn(
-            "Invalid tool arguments JSON:",
+            "Failed to parse function arguments:",
             toolCall.function.arguments
           );
           continue;
         }
 
-        console.log(`Executing: ${functionName}`, functionArgs);
+        console.log(`✅ ${functionName}:`, functionArgs);
 
-        const updates: Record<string, any> = {
-          updated_at: new Date().toISOString(),
-        };
+        if (functionName === "update_profile") {
+          // Convert equipment_access string to JSON if needed
+          let equipmentData = functionArgs.equipment_access;
+          if (typeof equipmentData === "string") {
+            equipmentData = { description: equipmentData };
+          }
 
-        if (functionName === "save_basic_info") {
-          Object.assign(updates, {
-            full_name: functionArgs.full_name,
-            age: functionArgs.age,
-            gender: functionArgs.gender,
-            height_cm: functionArgs.height_cm,
-            weight_kg: functionArgs.weight_kg,
-          });
+          // Only include fields that were actually provided
+          const updates: Record<string, any> = {
+            updated_at: new Date().toISOString(),
+          };
+
+          // Only add fields that have values
+          if (functionArgs.full_name)
+            updates.full_name = functionArgs.full_name;
+          if (functionArgs.age) updates.age = functionArgs.age;
+          if (functionArgs.gender) updates.gender = functionArgs.gender;
+          if (functionArgs.height_cm)
+            updates.height_cm = functionArgs.height_cm;
+          if (functionArgs.weight_kg)
+            updates.weight_kg = functionArgs.weight_kg;
+          if (functionArgs.fitness_goal)
+            updates.fitness_goal = functionArgs.fitness_goal;
+          if (functionArgs.fitness_level)
+            updates.fitness_level = functionArgs.fitness_level;
+          if (functionArgs.available_days)
+            updates.available_days = functionArgs.available_days;
+          if (equipmentData) updates.equipment_access = equipmentData;
+          if (functionArgs.injuries) updates.injuries = functionArgs.injuries;
+
+          console.log("📝 Updating profile with:", updates);
+
+          const { data, error } = await supabase
+            .from("profiles")
+            .update(updates)
+            .eq("id", userId)
+            .select();
+
+          if (error) {
+            console.error("❌ Supabase error:", error);
+          } else {
+            console.log("✅ Update successful");
+          }
         }
-
-        if (functionName === "save_fitness_info") {
-          Object.assign(updates, {
-            fitness_goal: functionArgs.fitness_goal,
-            fitness_level: functionArgs.fitness_level,
-            available_days: functionArgs.available_days || [],
-          });
-        }
-
-        if (functionName === "save_equipment_and_injuries") {
-          Object.assign(updates, {
-            equipment_access: functionArgs.equipment_access || {},
-            injuries: functionArgs.injuries || [],
-          });
-        }
-
-        await supabase.from("profiles").update(updates).eq("id", userId);
 
         if (functionName === "complete_onboarding") {
+          console.log("🎉 Onboarding complete!");
           return NextResponse.json({
-            message: assistantMessage.content || "Onboarding complete!",
+            message:
+              assistantMessage.content ||
+              "Perfect! I have everything I need. Let me create your personalized plan...",
             completed: true,
           });
         }
       }
     }
 
+    // If AI called a function but didn't provide a message,
+    // make another call to get the actual response
+    if (!assistantMessage.content && toolCalls?.length) {
+      console.log(
+        "⚠️ AI called function but no message. Making follow-up call..."
+      );
+
+      const followUpMessages = [
+        ...messages,
+        {
+          role: "assistant" as const,
+          tool_calls: toolCalls,
+        },
+        ...toolCalls.map((toolCall) => ({
+          role: "tool" as const,
+          tool_call_id: toolCall.id,
+          content: "Data saved successfully",
+        })),
+      ];
+
+      const followUpResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          ...followUpMessages,
+        ],
+        temperature: 0.7,
+      });
+
+      const followUpMessage = followUpResponse.choices[0].message.content;
+      console.log("Follow-up response:", followUpMessage);
+
+      return NextResponse.json({
+        message: followUpMessage || "Got it! What else can you tell me?",
+        completed: false,
+      });
+    }
+
     return NextResponse.json({
-      message: assistantMessage.content,
+      message: assistantMessage.content || "I'm listening, tell me more!",
       completed: false,
     });
   } catch (error) {
-    console.error("Onboarding error:", error);
-    return NextResponse.json({ error: "Chat failed" }, { status: 500 });
+    console.error("❌ Onboarding error:", error);
+    return NextResponse.json(
+      { error: "Failed to process chat" },
+      { status: 500 }
+    );
   }
 }
