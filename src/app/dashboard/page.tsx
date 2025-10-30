@@ -135,7 +135,7 @@ export default function DashboardPage() {
                 Week {plan?.week_number || 1}
               </div>
               <p className="text-xs text-muted-foreground">
-                {totalWorkouts} workouts scheduled
+                {totalWorkouts} Workouts Scheduled
               </p>
             </CardContent>
           </Card>
@@ -150,7 +150,7 @@ export default function DashboardPage() {
                 {completedWorkouts}/{totalWorkouts}
               </div>
               <p className="text-xs text-muted-foreground">
-                workouts completed
+                Workouts Completed
               </p>
             </CardContent>
           </Card>
@@ -165,7 +165,7 @@ export default function DashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{totalExercises}</div>
               <p className="text-xs text-muted-foreground">
-                across all workouts
+                Across all Workouts
               </p>
             </CardContent>
           </Card>
@@ -180,7 +180,7 @@ export default function DashboardPage() {
             <CardContent>
               <div className="text-2xl font-bold">{totalDuration}min</div>
               <p className="text-xs text-muted-foreground">
-                total training time
+                Total Training Time
               </p>
             </CardContent>
           </Card>
