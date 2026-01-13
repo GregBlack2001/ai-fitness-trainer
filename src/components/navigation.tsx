@@ -116,6 +116,14 @@ export function Navigation() {
                     Coach
                   </Button>
                 </Link>
+                <Link href="/nutrition">
+                  <Button
+                    variant={pathname === "/nutrition" ? "secondary" : "ghost"}
+                    size="sm"
+                  >
+                    Nutrition
+                  </Button>
+                </Link>
                 <Link href="/progress">
                   <Button
                     variant={pathname === "/progress" ? "secondary" : "ghost"}
@@ -163,6 +171,11 @@ export function Navigation() {
                     <DropdownMenuItem asChild>
                       <Link href="/chat" className="cursor-pointer">
                         Coach
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/nutrition" className="cursor-pointer">
+                        Nutrition
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>

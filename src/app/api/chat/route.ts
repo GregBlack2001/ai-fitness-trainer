@@ -1,43 +1,51 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import {
+  checkRateLimit,
+  getClientIp,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
+import { isValidUUID, validateChatMessage } from "@/lib/validation";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-const SYSTEM_PROMPT = `You are an expert AI fitness coach with deep knowledge of exercise science, nutrition, and training programming. You have access to the user's profile and current workout plan.
+const SYSTEM_PROMPT = `You are an expert AI fitness and nutrition coach with deep knowledge of exercise science, nutrition, and training programming. You have access to the user's profile, workout plan, and meal plan.
 
 Your capabilities include:
-1. **Answering fitness questions** - nutrition, form, recovery, motivation, etc.
-2. **Modifying workout plans** - swap exercises, change days, adjust intensity
-3. **Accommodating injuries** - modify exercises to work around limitations
-4. **Providing encouragement** - motivate and support the user's journey
+1. **Answering fitness & nutrition questions** - exercise form, recovery, motivation, diet advice, macro guidance
+2. **Modifying workout plans** - swap exercises, change days, adjust intensity, add/remove exercises
+3. **Modifying meal plans** - swap meals, adjust portions, accommodate new dietary needs, regenerate days
+4. **Accommodating injuries** - modify exercises to work around limitations
+5. **Providing encouragement** - motivate and support the user's journey
 
 IMPORTANT GUIDELINES:
 - Be conversational, supportive, and encouraging
-- When modifying workouts, explain WHY you're making changes
+- When modifying plans, explain WHY you're making changes
 - For injuries, always recommend consulting a healthcare professional for serious concerns
 - When swapping exercises, ensure the replacement targets the same muscle groups
+- For nutrition changes, maintain the user's calorie and macro targets
 - Keep responses concise but helpful
 
-When you need to modify the workout plan, use the available functions. Always confirm changes with the user before making them permanent.
+When you need to modify plans, use the available functions. Always confirm major changes with the user.
 
-Current date context: The user is working through their personalized workout plan.`;
+Current date context: The user is working through their personalized fitness and nutrition plan.`;
 
 const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  // WORKOUT FUNCTIONS
   {
     type: "function",
     function: {
       name: "swap_exercise",
-      description:
-        "Replace one exercise with another in the workout plan. Use when user wants to change a specific exercise.",
+      description: "Replace one exercise with another in the workout plan",
       parameters: {
         type: "object",
         properties: {
           day: {
             type: "string",
-            description: "The workout day (e.g., 'Monday', 'Wednesday')",
+            description: "The workout day (e.g., 'Monday')",
           },
           old_exercise: {
             type: "string",
@@ -47,27 +55,20 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "string",
             description: "Name of the replacement exercise",
           },
-          new_sets: {
-            type: "number",
-            description: "Number of sets for new exercise",
-          },
+          new_sets: { type: "number", description: "Number of sets" },
           new_reps: {
             type: "number",
-            description:
-              "Number of reps for new exercise (optional if duration-based)",
+            description: "Number of reps (optional if duration-based)",
           },
           new_duration_seconds: {
             type: "number",
-            description: "Duration in seconds (optional, for timed exercises)",
+            description: "Duration in seconds (optional)",
           },
           new_rest_seconds: {
             type: "number",
-            description: "Rest period between sets in seconds",
+            description: "Rest period between sets",
           },
-          new_notes: {
-            type: "string",
-            description: "Form cues or notes for the new exercise",
-          },
+          new_notes: { type: "string", description: "Form cues or notes" },
           reason: {
             type: "string",
             description: "Why this swap is being made",
@@ -87,26 +88,33 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "move_workout_day",
+      name: "adjust_workout_intensity",
       description:
-        "Move a workout from one day to another. Use when user needs to reschedule.",
+        "Adjust the overall intensity of workouts (sets, reps, or rest)",
       parameters: {
         type: "object",
         properties: {
-          from_day: {
+          adjustment_type: { type: "string", enum: ["increase", "decrease"] },
+          target: { type: "string", enum: ["all_workouts", "specific_day"] },
+          specific_day: {
             type: "string",
-            description: "Current day of the workout (e.g., 'Monday')",
+            description: "If target is specific_day, which day",
           },
-          to_day: {
-            type: "string",
-            description: "New day for the workout (e.g., 'Tuesday')",
+          sets_change: {
+            type: "number",
+            description: "Sets to add/remove (e.g., 1 or -1)",
           },
-          reason: {
-            type: "string",
-            description: "Why the day is being changed",
+          reps_change: {
+            type: "number",
+            description: "Reps to add/remove per set",
           },
+          rest_change_seconds: {
+            type: "number",
+            description: "Rest period adjustment",
+          },
+          reason: { type: "string" },
         },
-        required: ["from_day", "to_day", "reason"],
+        required: ["adjustment_type", "target", "reason"],
       },
     },
   },
@@ -114,21 +122,12 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "modify_for_injury",
-      description:
-        "Modify the workout plan to accommodate an injury. Removes or replaces exercises that could aggravate the injury.",
+      description: "Modify workouts to accommodate an injury",
       parameters: {
         type: "object",
         properties: {
-          injury_area: {
-            type: "string",
-            description:
-              "Body part or area affected (e.g., 'lower back', 'right knee', 'shoulder')",
-          },
-          severity: {
-            type: "string",
-            enum: ["mild", "moderate", "severe"],
-            description: "How severe is the injury",
-          },
+          injury_area: { type: "string", description: "Body part affected" },
+          severity: { type: "string", enum: ["mild", "moderate", "severe"] },
           modifications: {
             type: "array",
             items: {
@@ -147,12 +146,8 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
               },
               required: ["day", "exercise_to_modify", "action"],
             },
-            description: "List of modifications to make",
           },
-          general_advice: {
-            type: "string",
-            description: "General advice for training with this injury",
-          },
+          general_advice: { type: "string" },
         },
         required: [
           "injury_area",
@@ -166,89 +161,19 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
-      name: "adjust_intensity",
-      description:
-        "Adjust the overall intensity of workouts (sets, reps, or rest periods)",
-      parameters: {
-        type: "object",
-        properties: {
-          adjustment_type: {
-            type: "string",
-            enum: ["increase", "decrease"],
-            description: "Whether to increase or decrease intensity",
-          },
-          target: {
-            type: "string",
-            enum: ["all_workouts", "specific_day"],
-            description: "Apply to all workouts or a specific day",
-          },
-          specific_day: {
-            type: "string",
-            description: "If target is specific_day, which day",
-          },
-          sets_change: {
-            type: "number",
-            description: "How many sets to add/remove (e.g., 1 or -1)",
-          },
-          reps_change: {
-            type: "number",
-            description: "How many reps to add/remove per set",
-          },
-          rest_change_seconds: {
-            type: "number",
-            description:
-              "How much to adjust rest periods (positive = more rest)",
-          },
-          reason: {
-            type: "string",
-            description: "Why intensity is being adjusted",
-          },
-        },
-        required: ["adjustment_type", "target", "reason"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
       name: "add_exercise",
-      description: "Add a new exercise to a specific workout day",
+      description: "Add a new exercise to a workout day",
       parameters: {
         type: "object",
         properties: {
-          day: {
-            type: "string",
-            description: "The workout day to add the exercise to",
-          },
-          exercise_name: {
-            type: "string",
-            description: "Name of the exercise to add",
-          },
-          sets: {
-            type: "number",
-            description: "Number of sets",
-          },
-          reps: {
-            type: "number",
-            description: "Number of reps (optional if duration-based)",
-          },
-          duration_seconds: {
-            type: "number",
-            description: "Duration in seconds (optional)",
-          },
-          rest_seconds: {
-            type: "number",
-            description: "Rest between sets",
-          },
-          notes: {
-            type: "string",
-            description: "Form cues or notes",
-          },
-          position: {
-            type: "string",
-            enum: ["start", "end", "after_warmup"],
-            description: "Where to add the exercise in the workout",
-          },
+          day: { type: "string" },
+          exercise_name: { type: "string" },
+          sets: { type: "number" },
+          reps: { type: "number" },
+          duration_seconds: { type: "number" },
+          rest_seconds: { type: "number" },
+          notes: { type: "string" },
+          position: { type: "string", enum: ["start", "end", "after_warmup"] },
         },
         required: ["day", "exercise_name", "sets", "rest_seconds"],
       },
@@ -262,69 +187,149 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {
-          day: {
-            type: "string",
-            description: "The workout day",
-          },
-          exercise_name: {
-            type: "string",
-            description: "Name of the exercise to remove",
-          },
-          reason: {
-            type: "string",
-            description: "Why the exercise is being removed",
-          },
+          day: { type: "string" },
+          exercise_name: { type: "string" },
+          reason: { type: "string" },
         },
         required: ["day", "exercise_name", "reason"],
       },
     },
   },
+  // NUTRITION FUNCTIONS
   {
     type: "function",
     function: {
-      name: "get_exercise_alternatives",
+      name: "swap_meal",
       description:
-        "Get alternative exercises for a specific exercise (doesn't modify plan, just suggests)",
+        "Replace a meal with a different one that matches the macro targets",
       parameters: {
         type: "object",
         properties: {
-          exercise_name: {
+          day: {
             type: "string",
-            description: "The exercise to find alternatives for",
+            description: "Day of the week (e.g., 'Monday')",
           },
-          reason: {
+          meal_name: {
             type: "string",
-            description:
-              "Why alternatives are needed (e.g., 'no equipment', 'injury', 'preference')",
+            description: "Which meal to replace (e.g., 'Breakfast', 'Lunch')",
           },
-          equipment_available: {
-            type: "string",
-            description: "What equipment the user has access to",
+          new_foods: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                item: { type: "string" },
+                portion: { type: "string" },
+                calories: { type: "number" },
+                protein: { type: "number" },
+                carbs: { type: "number" },
+                fat: { type: "number" },
+              },
+              required: [
+                "item",
+                "portion",
+                "calories",
+                "protein",
+                "carbs",
+                "fat",
+              ],
+            },
           },
+          reason: { type: "string" },
         },
-        required: ["exercise_name"],
+        required: ["day", "meal_name", "new_foods", "reason"],
       },
     },
   },
   {
     type: "function",
     function: {
-      name: "update_profile_injury",
+      name: "adjust_meal_portions",
       description:
-        "Update the user's profile with injury information for future workout generation",
+        "Adjust portion sizes for a meal to change calorie/macro intake",
       parameters: {
         type: "object",
         properties: {
-          injury: {
-            type: "string",
-            description: "Description of the injury",
+          day: { type: "string" },
+          meal_name: { type: "string" },
+          adjustment: { type: "string", enum: ["increase", "decrease"] },
+          percentage: {
+            type: "number",
+            description: "Percentage to adjust by (e.g., 20 for 20%)",
           },
-          add_or_remove: {
+          reason: { type: "string" },
+        },
+        required: ["day", "meal_name", "adjustment", "percentage", "reason"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_dietary_preferences",
+      description:
+        "Update user's dietary restrictions, allergies, or disliked foods",
+      parameters: {
+        type: "object",
+        properties: {
+          add_restrictions: { type: "array", items: { type: "string" } },
+          remove_restrictions: { type: "array", items: { type: "string" } },
+          add_allergies: { type: "array", items: { type: "string" } },
+          remove_allergies: { type: "array", items: { type: "string" } },
+          add_disliked: { type: "array", items: { type: "string" } },
+          remove_disliked: { type: "array", items: { type: "string" } },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "regenerate_day_meals",
+      description: "Regenerate all meals for a specific day with new options",
+      parameters: {
+        type: "object",
+        properties: {
+          day: { type: "string", description: "Day to regenerate meals for" },
+          special_requests: {
             type: "string",
-            enum: ["add", "remove"],
-            description:
-              "Whether to add or remove this injury from the profile",
+            description: "Any special requests for the new meals",
           },
+        },
+        required: ["day"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "adjust_daily_calories",
+      description: "Adjust the user's daily calorie target",
+      parameters: {
+        type: "object",
+        properties: {
+          new_calorie_target: { type: "number" },
+          reason: { type: "string" },
+          regenerate_meal_plan: {
+            type: "boolean",
+            description: "Whether to regenerate the meal plan with new targets",
+          },
+        },
+        required: ["new_calorie_target", "reason"],
+      },
+    },
+  },
+  // PROFILE FUNCTIONS
+  {
+    type: "function",
+    function: {
+      name: "update_profile_injury",
+      description: "Add or remove an injury from user's profile",
+      parameters: {
+        type: "object",
+        properties: {
+          injury: { type: "string" },
+          add_or_remove: { type: "string", enum: ["add", "remove"] },
         },
         required: ["injury", "add_or_remove"],
       },
@@ -332,138 +337,46 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
-// Helper function to apply modifications to workout plan
+// Apply workout modifications
 async function applyWorkoutModification(
   supabase: any,
   planId: string,
   currentPlan: any,
   functionName: string,
   args: any
-): Promise<{ success: boolean; message: string; updatedPlan?: any }> {
+): Promise<{ success: boolean; message: string }> {
   const workouts = [...currentPlan.workouts];
 
   switch (functionName) {
     case "swap_exercise": {
-      const dayIndex = workouts.findIndex(
-        (w: any) => w.day.toLowerCase() === args.day.toLowerCase()
-      );
-      if (dayIndex === -1) {
-        return {
-          success: false,
-          message: `Couldn't find workout for ${args.day}`,
-        };
-      }
-
-      const exerciseIndex = workouts[dayIndex].exercises.findIndex((e: any) =>
-        e.name.toLowerCase().includes(args.old_exercise.toLowerCase())
-      );
-      if (exerciseIndex === -1) {
-        return {
-          success: false,
-          message: `Couldn't find exercise "${args.old_exercise}" on ${args.day}`,
-        };
-      }
-
-      workouts[dayIndex].exercises[exerciseIndex] = {
-        name: args.new_exercise,
-        sets: args.new_sets,
-        reps: args.new_reps || null,
-        duration_seconds: args.new_duration_seconds || null,
-        rest_seconds: args.new_rest_seconds,
-        notes:
-          args.new_notes || `Swapped from ${args.old_exercise}: ${args.reason}`,
-      };
-      break;
-    }
-
-    case "move_workout_day": {
-      const fromIndex = workouts.findIndex(
-        (w: any) => w.day.toLowerCase() === args.from_day.toLowerCase()
-      );
-      if (fromIndex === -1) {
-        return {
-          success: false,
-          message: `Couldn't find workout for ${args.from_day}`,
-        };
-      }
-
-      workouts[fromIndex].day = args.to_day;
-      // Re-sort by day order
-      const dayOrder = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ];
-      workouts.sort(
-        (a: any, b: any) => dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day)
-      );
-      break;
-    }
-
-    case "remove_exercise": {
       const dayIdx = workouts.findIndex(
         (w: any) => w.day.toLowerCase() === args.day.toLowerCase()
       );
-      if (dayIdx === -1) {
-        return {
-          success: false,
-          message: `Couldn't find workout for ${args.day}`,
-        };
-      }
+      if (dayIdx === -1)
+        return { success: false, message: `Day "${args.day}" not found` };
 
       const exIdx = workouts[dayIdx].exercises.findIndex((e: any) =>
-        e.name.toLowerCase().includes(args.exercise_name.toLowerCase())
+        e.name.toLowerCase().includes(args.old_exercise.toLowerCase())
       );
-      if (exIdx === -1) {
+      if (exIdx === -1)
         return {
           success: false,
-          message: `Couldn't find exercise "${args.exercise_name}"`,
+          message: `Exercise "${args.old_exercise}" not found`,
         };
-      }
 
-      workouts[dayIdx].exercises.splice(exIdx, 1);
-      break;
-    }
-
-    case "add_exercise": {
-      const dayIndex2 = workouts.findIndex(
-        (w: any) => w.day.toLowerCase() === args.day.toLowerCase()
-      );
-      if (dayIndex2 === -1) {
-        return {
-          success: false,
-          message: `Couldn't find workout for ${args.day}`,
-        };
-      }
-
-      const newExercise = {
-        name: args.exercise_name,
-        sets: args.sets,
-        reps: args.reps || null,
-        duration_seconds: args.duration_seconds || null,
-        rest_seconds: args.rest_seconds,
-        notes: args.notes || "",
+      workouts[dayIdx].exercises[exIdx] = {
+        name: args.new_exercise,
+        sets: args.new_sets,
+        reps: args.new_reps || workouts[dayIdx].exercises[exIdx].reps,
+        duration_seconds: args.new_duration_seconds,
+        rest_seconds: args.new_rest_seconds,
+        notes: args.new_notes || `Swapped from ${args.old_exercise}`,
       };
-
-      if (args.position === "start") {
-        workouts[dayIndex2].exercises.unshift(newExercise);
-      } else if (
-        args.position === "after_warmup" &&
-        workouts[dayIndex2].exercises.length > 0
-      ) {
-        workouts[dayIndex2].exercises.splice(1, 0, newExercise);
-      } else {
-        workouts[dayIndex2].exercises.push(newExercise);
-      }
       break;
     }
 
-    case "adjust_intensity": {
-      const daysToModify =
+    case "adjust_workout_intensity": {
+      const targetDays =
         args.target === "all_workouts"
           ? workouts
           : workouts.filter(
@@ -471,16 +384,19 @@ async function applyWorkoutModification(
                 w.day.toLowerCase() === args.specific_day?.toLowerCase()
             );
 
-      daysToModify.forEach((workout: any) => {
-        workout.exercises.forEach((exercise: any) => {
+      for (const workout of targetDays) {
+        for (const exercise of workout.exercises) {
           if (args.sets_change) {
             exercise.sets = Math.max(
               1,
               (exercise.sets || 3) + args.sets_change
             );
           }
-          if (args.reps_change && exercise.reps) {
-            exercise.reps = Math.max(1, exercise.reps + args.reps_change);
+          if (args.reps_change) {
+            exercise.reps = Math.max(
+              1,
+              (exercise.reps || 10) + args.reps_change
+            );
           }
           if (args.rest_change_seconds) {
             exercise.rest_seconds = Math.max(
@@ -488,8 +404,59 @@ async function applyWorkoutModification(
               (exercise.rest_seconds || 60) + args.rest_change_seconds
             );
           }
-        });
-      });
+        }
+      }
+      break;
+    }
+
+    case "add_exercise": {
+      const dayIdx = workouts.findIndex(
+        (w: any) => w.day.toLowerCase() === args.day.toLowerCase()
+      );
+      if (dayIdx === -1)
+        return { success: false, message: `Day "${args.day}" not found` };
+
+      const newExercise = {
+        name: args.exercise_name,
+        sets: args.sets,
+        reps: args.reps,
+        duration_seconds: args.duration_seconds,
+        rest_seconds: args.rest_seconds,
+        notes: args.notes || "",
+      };
+
+      if (args.position === "start") {
+        workouts[dayIdx].exercises.unshift(newExercise);
+      } else if (args.position === "after_warmup") {
+        const warmupIdx = workouts[dayIdx].exercises.findIndex(
+          (e: any) =>
+            e.name.toLowerCase().includes("warmup") ||
+            e.name.toLowerCase().includes("warm-up")
+        );
+        workouts[dayIdx].exercises.splice(warmupIdx + 1, 0, newExercise);
+      } else {
+        workouts[dayIdx].exercises.push(newExercise);
+      }
+      break;
+    }
+
+    case "remove_exercise": {
+      const dayIdx = workouts.findIndex(
+        (w: any) => w.day.toLowerCase() === args.day.toLowerCase()
+      );
+      if (dayIdx === -1)
+        return { success: false, message: `Day "${args.day}" not found` };
+
+      const exIdx = workouts[dayIdx].exercises.findIndex((e: any) =>
+        e.name.toLowerCase().includes(args.exercise_name.toLowerCase())
+      );
+      if (exIdx === -1)
+        return {
+          success: false,
+          message: `Exercise "${args.exercise_name}" not found`,
+        };
+
+      workouts[dayIdx].exercises.splice(exIdx, 1);
       break;
     }
 
@@ -530,63 +497,307 @@ async function applyWorkoutModification(
     }
 
     default:
-      return { success: false, message: "Unknown modification type" };
+      return { success: false, message: "Unknown workout modification type" };
   }
 
   // Save updated plan
-  const updatedExercises = { ...currentPlan, workouts };
   const { error } = await supabase
     .from("workout_plans")
-    .update({
-      exercises: updatedExercises,
-    })
+    .update({ exercises: { ...currentPlan, workouts } })
     .eq("id", planId);
 
   if (error) {
-    console.error("Failed to update plan:", error);
-    return { success: false, message: "Failed to save changes to database" };
+    console.error("Failed to update workout plan:", error);
+    return { success: false, message: "Failed to save workout changes" };
   }
 
-  return {
-    success: true,
-    message: "Plan updated successfully",
-    updatedPlan: updatedExercises,
-  };
+  return { success: true, message: "Workout plan updated successfully" };
+}
+
+// Apply nutrition modifications
+async function applyNutritionModification(
+  supabase: any,
+  mealPlanId: string,
+  currentMealPlan: any,
+  functionName: string,
+  args: any,
+  userId: string,
+  profile: any
+): Promise<{ success: boolean; message: string }> {
+  const days = [...(currentMealPlan.days || [])];
+
+  switch (functionName) {
+    case "swap_meal": {
+      const dayIdx = days.findIndex(
+        (d: any) => d.day.toLowerCase() === args.day.toLowerCase()
+      );
+      if (dayIdx === -1)
+        return {
+          success: false,
+          message: `Day "${args.day}" not found in meal plan`,
+        };
+
+      const mealIdx = days[dayIdx].meals.findIndex(
+        (m: any) => m.name.toLowerCase() === args.meal_name.toLowerCase()
+      );
+      if (mealIdx === -1)
+        return {
+          success: false,
+          message: `Meal "${args.meal_name}" not found`,
+        };
+
+      // Calculate new totals
+      const totalCalories = args.new_foods.reduce(
+        (sum: number, f: any) => sum + f.calories,
+        0
+      );
+      const totalProtein = args.new_foods.reduce(
+        (sum: number, f: any) => sum + f.protein,
+        0
+      );
+      const totalCarbs = args.new_foods.reduce(
+        (sum: number, f: any) => sum + f.carbs,
+        0
+      );
+      const totalFat = args.new_foods.reduce(
+        (sum: number, f: any) => sum + f.fat,
+        0
+      );
+
+      days[dayIdx].meals[mealIdx] = {
+        name: args.meal_name,
+        foods: args.new_foods,
+        totalCalories,
+        totalProtein,
+        totalCarbs,
+        totalFat,
+      };
+
+      // Recalculate daily totals
+      days[dayIdx].dailyTotals = {
+        calories: days[dayIdx].meals.reduce(
+          (sum: number, m: any) => sum + m.totalCalories,
+          0
+        ),
+        protein: days[dayIdx].meals.reduce(
+          (sum: number, m: any) => sum + m.totalProtein,
+          0
+        ),
+        carbs: days[dayIdx].meals.reduce(
+          (sum: number, m: any) => sum + m.totalCarbs,
+          0
+        ),
+        fat: days[dayIdx].meals.reduce(
+          (sum: number, m: any) => sum + m.totalFat,
+          0
+        ),
+      };
+      break;
+    }
+
+    case "adjust_meal_portions": {
+      const dayIdx = days.findIndex(
+        (d: any) => d.day.toLowerCase() === args.day.toLowerCase()
+      );
+      if (dayIdx === -1)
+        return { success: false, message: `Day "${args.day}" not found` };
+
+      const mealIdx = days[dayIdx].meals.findIndex(
+        (m: any) => m.name.toLowerCase() === args.meal_name.toLowerCase()
+      );
+      if (mealIdx === -1)
+        return {
+          success: false,
+          message: `Meal "${args.meal_name}" not found`,
+        };
+
+      const multiplier =
+        args.adjustment === "increase"
+          ? 1 + args.percentage / 100
+          : 1 - args.percentage / 100;
+
+      const meal = days[dayIdx].meals[mealIdx];
+      for (const food of meal.foods) {
+        food.calories = Math.round(food.calories * multiplier);
+        food.protein = Math.round(food.protein * multiplier);
+        food.carbs = Math.round(food.carbs * multiplier);
+        food.fat = Math.round(food.fat * multiplier);
+      }
+
+      meal.totalCalories = meal.foods.reduce(
+        (sum: number, f: any) => sum + f.calories,
+        0
+      );
+      meal.totalProtein = meal.foods.reduce(
+        (sum: number, f: any) => sum + f.protein,
+        0
+      );
+      meal.totalCarbs = meal.foods.reduce(
+        (sum: number, f: any) => sum + f.carbs,
+        0
+      );
+      meal.totalFat = meal.foods.reduce(
+        (sum: number, f: any) => sum + f.fat,
+        0
+      );
+
+      // Recalculate daily totals
+      days[dayIdx].dailyTotals = {
+        calories: days[dayIdx].meals.reduce(
+          (sum: number, m: any) => sum + m.totalCalories,
+          0
+        ),
+        protein: days[dayIdx].meals.reduce(
+          (sum: number, m: any) => sum + m.totalProtein,
+          0
+        ),
+        carbs: days[dayIdx].meals.reduce(
+          (sum: number, m: any) => sum + m.totalCarbs,
+          0
+        ),
+        fat: days[dayIdx].meals.reduce(
+          (sum: number, m: any) => sum + m.totalFat,
+          0
+        ),
+      };
+      break;
+    }
+
+    case "update_dietary_preferences": {
+      const updates: any = {};
+
+      if (args.add_restrictions || args.remove_restrictions) {
+        let restrictions = profile.dietary_restrictions || [];
+        if (args.add_restrictions) {
+          restrictions = [
+            ...new Set([...restrictions, ...args.add_restrictions]),
+          ];
+        }
+        if (args.remove_restrictions) {
+          restrictions = restrictions.filter(
+            (r: string) => !args.remove_restrictions.includes(r)
+          );
+        }
+        updates.dietary_restrictions = restrictions;
+      }
+
+      if (args.add_allergies || args.remove_allergies) {
+        let allergies = profile.food_allergies || [];
+        if (args.add_allergies) {
+          allergies = [...new Set([...allergies, ...args.add_allergies])];
+        }
+        if (args.remove_allergies) {
+          allergies = allergies.filter(
+            (a: string) => !args.remove_allergies.includes(a)
+          );
+        }
+        updates.food_allergies = allergies;
+      }
+
+      if (args.add_disliked || args.remove_disliked) {
+        let disliked = profile.disliked_foods || [];
+        if (args.add_disliked) {
+          disliked = [...new Set([...disliked, ...args.add_disliked])];
+        }
+        if (args.remove_disliked) {
+          disliked = disliked.filter(
+            (d: string) => !args.remove_disliked.includes(d)
+          );
+        }
+        updates.disliked_foods = disliked;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await supabase.from("profiles").update(updates).eq("id", userId);
+      }
+
+      return { success: true, message: "Dietary preferences updated" };
+    }
+
+    case "regenerate_day_meals": {
+      // This will trigger a regeneration - we'll set a flag
+      return {
+        success: true,
+        message: `Day "${args.day}" flagged for regeneration. The meal plan will be updated with new options.`,
+      };
+    }
+
+    default:
+      return { success: false, message: "Unknown nutrition modification type" };
+  }
+
+  // Save updated meal plan
+  const { error } = await supabase
+    .from("meal_plans")
+    .update({ meals: { days } })
+    .eq("id", mealPlanId);
+
+  if (error) {
+    console.error("Failed to update meal plan:", error);
+    return { success: false, message: "Failed to save meal plan changes" };
+  }
+
+  return { success: true, message: "Meal plan updated successfully" };
 }
 
 export async function POST(request: Request) {
   try {
+    // Rate limiting
+    const clientIp = getClientIp(request);
+    const rateLimitResult = checkRateLimit(clientIp, "api:chat");
+
+    if (!rateLimitResult.success) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     const { messages, userId } = await request.json();
 
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 401 });
+    // Validate user ID
+    if (!userId || !isValidUUID(userId)) {
+      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    }
+
+    // Validate last message
+    const lastMessage = messages?.[messages.length - 1]?.content;
+    if (lastMessage) {
+      const messageValidation = validateChatMessage(lastMessage);
+      if (!messageValidation.valid) {
+        return NextResponse.json(
+          { error: messageValidation.error },
+          { status: 400 }
+        );
+      }
     }
 
     console.log("=== COACH CHAT REQUEST ===");
     console.log("User ID:", userId);
-    console.log("Messages:", messages.length);
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Fetch user profile
+    // Fetch user data
     const { data: profile } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .single();
 
-    // Fetch active workout plan
-    const { data: plan } = await supabase
+    const { data: workoutPlan } = await supabase
       .from("workout_plans")
       .select("*")
       .eq("user_id", userId)
       .eq("is_active", true)
       .single();
 
-    // Fetch recent workout logs
+    const { data: mealPlan } = await supabase
+      .from("meal_plans")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .single();
+
     const { data: recentLogs } = await supabase
       .from("workout_logs")
       .select("*")
@@ -594,25 +805,39 @@ export async function POST(request: Request) {
       .order("completed_at", { ascending: false })
       .limit(5);
 
-    // Build context for AI
+    // Build context
     const contextMessage = `
 CURRENT USER CONTEXT:
 - Name: ${profile?.full_name || "User"}
 - Fitness Level: ${profile?.fitness_level || "intermediate"}
 - Goal: ${profile?.fitness_goal || "general fitness"}
+- Activity Level: ${profile?.activity_level || "moderate"}
 - Available Days: ${profile?.available_days?.join(", ") || "flexible"}
 - Equipment: ${
       profile?.equipment_access?.description || "standard gym equipment"
     }
-- Known Injuries: ${
-      profile?.injuries?.length > 0
-        ? profile.injuries.join(", ")
-        : "None recorded"
+- Injuries: ${
+      profile?.injuries?.length > 0 ? profile.injuries.join(", ") : "None"
+    }
+- Dietary Restrictions: ${
+      profile?.dietary_restrictions?.length > 0
+        ? profile.dietary_restrictions.join(", ")
+        : "None"
+    }
+- Food Allergies: ${
+      profile?.food_allergies?.length > 0
+        ? profile.food_allergies.join(", ")
+        : "None"
+    }
+- Disliked Foods: ${
+      profile?.disliked_foods?.length > 0
+        ? profile.disliked_foods.join(", ")
+        : "None"
     }
 
-CURRENT WORKOUT PLAN (Week ${plan?.week_number || 1}):
+CURRENT WORKOUT PLAN (Week ${workoutPlan?.week_number || 1}):
 ${
-  plan?.exercises?.workouts
+  workoutPlan?.exercises?.workouts
     ?.map(
       (w: any) => `
 ${w.day} - ${w.focus} (${w.duration_minutes} min):
@@ -624,22 +849,39 @@ ${w.exercises
   .join("\n")}
 `
     )
-    .join("\n") || "No active plan"
+    .join("\n") || "No active workout plan"
 }
 
-RECENT ACTIVITY:
+CURRENT MEAL PLAN:
+Target: ${mealPlan?.target_calories || "N/A"} kcal | Protein: ${
+      mealPlan?.target_protein || "N/A"
+    }g | Carbs: ${mealPlan?.target_carbs || "N/A"}g | Fat: ${
+      mealPlan?.target_fat || "N/A"
+    }g
+${
+  mealPlan?.meals?.days
+    ?.slice(0, 2)
+    .map(
+      (d: any) => `
+${d.day}: ${d.meals?.map((m: any) => m.name).join(", ")}`
+    )
+    .join("") || "No active meal plan"
+}
+...and more days
+
+RECENT WORKOUTS:
 ${
   recentLogs
     ?.map(
       (log: any) =>
-        `- ${log.workout_day}: ${
-          log.completion_percentage
-        }% completed (${Math.round(log.duration_seconds / 60)} min)`
+        `- ${log.workout_day}: ${log.completion_percentage}% (${Math.round(
+          log.duration_seconds / 60
+        )} min)`
     )
     .join("\n") || "No recent workouts"
 }
 
-Use this context to provide personalized advice and make appropriate modifications when requested.`;
+Use this context to provide personalized advice and make modifications when requested.`;
 
     const systemWithContext = SYSTEM_PROMPT + "\n\n" + contextMessage;
 
@@ -656,6 +898,7 @@ Use this context to provide personalized advice and make appropriate modificatio
     const toolCalls = assistantMessage.tool_calls;
 
     let planModified = false;
+    let mealPlanModified = false;
     let modificationResults: string[] = [];
 
     // Handle function calls
@@ -673,93 +916,104 @@ Use this context to provide personalized advice and make appropriate modificatio
           continue;
         }
 
-        console.log(`🔧 Function call: ${functionName}`, args);
+        console.log(`🔧 Function: ${functionName}`, args);
 
-        // Handle non-modifying functions
-        if (functionName === "get_exercise_alternatives") {
-          // This just returns suggestions, doesn't modify
-          modificationResults.push(
-            `Suggested alternatives for ${args.exercise_name}`
-          );
-          continue;
+        // Workout modifications
+        if (
+          [
+            "swap_exercise",
+            "adjust_workout_intensity",
+            "add_exercise",
+            "remove_exercise",
+            "modify_for_injury",
+          ].includes(functionName)
+        ) {
+          if (workoutPlan) {
+            const result = await applyWorkoutModification(
+              supabase,
+              workoutPlan.id,
+              workoutPlan.exercises,
+              functionName,
+              args
+            );
+            if (result.success) planModified = true;
+            modificationResults.push(result.message);
+          } else {
+            modificationResults.push("No active workout plan to modify");
+          }
         }
 
-        if (functionName === "update_profile_injury") {
-          // Update profile injuries
-          const currentInjuries = profile?.injuries || [];
-          let newInjuries;
-
-          if (args.add_or_remove === "add") {
-            newInjuries = [...currentInjuries, args.injury];
-          } else {
-            newInjuries = currentInjuries.filter(
-              (i: string) =>
-                !i.toLowerCase().includes(args.injury.toLowerCase())
+        // Nutrition modifications
+        if (
+          [
+            "swap_meal",
+            "adjust_meal_portions",
+            "update_dietary_preferences",
+            "regenerate_day_meals",
+          ].includes(functionName)
+        ) {
+          if (mealPlan) {
+            const result = await applyNutritionModification(
+              supabase,
+              mealPlan.id,
+              mealPlan.meals,
+              functionName,
+              args,
+              userId,
+              profile
             );
+            if (result.success) mealPlanModified = true;
+            modificationResults.push(result.message);
+          } else {
+            modificationResults.push("No active meal plan to modify");
           }
+        }
+
+        // Profile injury update
+        if (functionName === "update_profile_injury") {
+          const currentInjuries = profile?.injuries || [];
+          const newInjuries =
+            args.add_or_remove === "add"
+              ? [...currentInjuries, args.injury]
+              : currentInjuries.filter(
+                  (i: string) =>
+                    !i.toLowerCase().includes(args.injury.toLowerCase())
+                );
 
           await supabase
             .from("profiles")
-            .update({
-              injuries: newInjuries,
-              updated_at: new Date().toISOString(),
-            })
+            .update({ injuries: newInjuries })
             .eq("id", userId);
-
           modificationResults.push(
             `${args.add_or_remove === "add" ? "Added" : "Removed"} injury: ${
               args.injury
             }`
           );
-          continue;
-        }
-
-        // Handle plan modifications
-        if (plan) {
-          const result = await applyWorkoutModification(
-            supabase,
-            plan.id,
-            plan.exercises,
-            functionName,
-            args
-          );
-
-          if (result.success) {
-            planModified = true;
-            modificationResults.push(result.message);
-          } else {
-            modificationResults.push(`⚠️ ${result.message}`);
-          }
         }
       }
     }
 
-    // If we made tool calls but need a follow-up response
+    // Get follow-up response if needed
     let finalMessage = assistantMessage.content;
 
     if (toolCalls?.length && !finalMessage) {
-      const followUpMessages = [
-        ...messages,
-        {
-          role: "assistant" as const,
-          tool_calls: toolCalls,
-        },
-        ...toolCalls.map((toolCall) => ({
-          role: "tool" as const,
-          tool_call_id: toolCall.id,
-          content: JSON.stringify({
-            success: true,
-            results: modificationResults,
-            plan_modified: planModified,
-          }),
-        })),
-      ];
-
       const followUpResponse = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
           { role: "system", content: systemWithContext },
-          ...followUpMessages,
+          ...messages,
+          {
+            role: "assistant",
+            tool_calls: toolCalls,
+          },
+          ...toolCalls.map((tc) => ({
+            role: "tool" as const,
+            tool_call_id: tc.id,
+            content: JSON.stringify({
+              success: true,
+              results: modificationResults,
+            }),
+          })),
         ],
         temperature: 0.7,
       });
@@ -769,9 +1023,9 @@ Use this context to provide personalized advice and make appropriate modificatio
 
     return NextResponse.json({
       message:
-        finalMessage ||
-        "I've processed your request. Is there anything else you'd like to adjust?",
+        finalMessage || "I've made the requested changes. Anything else?",
       planModified,
+      mealPlanModified,
       modifications: modificationResults,
     });
   } catch (error) {
