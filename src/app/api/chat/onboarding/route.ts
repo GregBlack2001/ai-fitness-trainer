@@ -6,35 +6,44 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-const SYSTEM_PROMPT = `You are an AI fitness and nutrition coach. Your ONLY job is to:
-1. Ask the user for information
-2. Call update_profile with ANY data they provide
-3. Ask the next question
+const SYSTEM_PROMPT = `You are an AI fitness coach collecting user information. Be BRIEF and conversational.
 
-YOU MUST call update_profile every single time the user gives you information.
+RULES:
+- Keep responses SHORT (1-2 sentences max)
+- Ask ONE question at a time
+- NO bullet points or lists in responses
+- NO previews of workout/meal plans
+- NO markdown headers (###)
+- Just ask the next question directly
+- Call update_profile immediately when user provides data
 
-Example:
-User: "I weigh 75kg"
-You: Call update_profile(weight_kg=75) AND say "Got it! What's your fitness goal?"
+Example good responses:
+- "Got it! How old are you?"
+- "Nice! And what's your main fitness goal?"
+- "Perfect! Which days do you prefer to work out?"
 
-Required data to collect (in this order):
-1. full_name (string)
-2. age (number)
-3. gender (string)  
-4. height_cm (number - height in centimeters)
-5. weight_kg (number - weight in kilograms)
-6. fitness_goal (string - e.g., "lose weight", "build muscle", "maintain")
-7. fitness_level (string - must be "beginner", "intermediate", or "advanced")
-8. activity_level (string - must be "sedentary", "light", "moderate", "active", or "very_active". Explain: sedentary=desk job little exercise, light=light exercise 1-3 days/week, moderate=moderate exercise 3-5 days/week, active=hard exercise 6-7 days/week, very_active=very hard exercise & physical job)
-9. available_days (array of day names for workouts - e.g., ["Monday", "Wednesday", "Friday"])
-10. equipment_access (string - description of available equipment)
-11. injuries (array of strings - list any injuries, or empty array if none)
-12. dietary_restrictions (array of strings - e.g., ["vegetarian", "vegan", "gluten-free", "dairy-free", "halal", "kosher", "none"])
-13. food_allergies (array of strings - e.g., ["peanuts", "shellfish", "eggs"] or empty array if none)
-14. disliked_foods (array of strings - foods they don't like to eat, or empty array)
-15. meals_per_day (number - how many meals they prefer eating, typically 3-6)
+Example BAD responses (too long):
+- "Great choice! Here's what your plan might look like: Day 1: Upper Body, Day 2: Lower Body..." ❌
+- "### Your Goals\nI'll create a personalized plan with..." ❌
 
-Be conversational and friendly. After collecting ALL the data above, call complete_onboarding.`;
+Data to collect (in order):
+1. full_name
+2. age
+3. gender
+4. height_cm
+5. weight_kg
+6. fitness_goal (lose weight, build muscle, maintain, etc.)
+7. fitness_level (beginner, intermediate, advanced)
+8. activity_level (sedentary, light, moderate, active, very_active)
+9. preferred_workout_days - Ask "Which days do you PREFER to work out?" (the plan will show all 7 days with rest days, but workouts will be on their preferred days)
+10. equipment_access (gym, home equipment, etc.)
+11. injuries (any injuries to work around)
+12. dietary_restrictions (vegetarian, vegan, gluten-free, etc.)
+13. food_allergies
+14. disliked_foods
+15. meals_per_day (how many meals they prefer)
+
+After ALL data collected, call complete_onboarding.`;
 
 const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -223,23 +232,44 @@ export async function POST(request: Request) {
           }
 
           // Generate workout plan
+          const preferredDays = profile.available_days || [
+            "Monday",
+            "Wednesday",
+            "Friday",
+          ];
+          const allDays = [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+          ];
+          const restDays = allDays.filter((d) => !preferredDays.includes(d));
+
           const planPrompt = `Create a week 1 workout plan for:
 - Name: ${profile.full_name}
 - Age: ${profile.age}
 - Gender: ${profile.gender}
 - Goal: ${profile.fitness_goal}
 - Fitness Level: ${profile.fitness_level}
-- Available Days: ${
-            profile.available_days?.join(", ") || "Monday, Wednesday, Friday"
+- Preferred Workout Days: ${preferredDays.join(", ")}
+- Rest Days: ${restDays.join(", ")}
+- Equipment: ${
+            profile.equipment_access?.description ||
+            profile.equipment_access ||
+            "Full gym"
           }
-- Equipment: ${profile.equipment_access?.description || "Full gym"}
 - Injuries to work around: ${
             profile.injuries?.length > 0 ? profile.injuries.join(", ") : "None"
           }
 
-Create ${
-            profile.available_days?.length || 3
-          } workout days. Each workout should be ${
+IMPORTANT: Create ALL 7 days of the week. 
+- Workout days (${preferredDays.join(", ")}): Full workouts with exercises
+- Rest days (${restDays.join(", ")}): Mark as rest/recovery days
+
+Each workout should be ${
             profile.fitness_level === "beginner"
               ? "30-40"
               : profile.fitness_level === "advanced"
@@ -247,12 +277,13 @@ Create ${
               : "40-55"
           } minutes.
 
-Return a JSON object:
+Return a JSON object with ALL 7 days:
 {
   "workouts": [
     {
       "day": "Monday",
       "focus": "Upper Body",
+      "isRestDay": false,
       "duration_minutes": 45,
       "exercises": [
         {
@@ -263,11 +294,18 @@ Return a JSON object:
           "notes": "Keep core tight"
         }
       ]
+    },
+    {
+      "day": "Tuesday",
+      "focus": "Rest & Recovery",
+      "isRestDay": true,
+      "duration_minutes": 0,
+      "exercises": []
     }
   ]
 }
 
-Include warmup at the start of each workout. Return valid JSON only.`;
+Include warmup at the start of each workout day (not rest days). Return valid JSON only with all 7 days.`;
 
           const planResponse = await openai.chat.completions.create({
             model: "gpt-4o",

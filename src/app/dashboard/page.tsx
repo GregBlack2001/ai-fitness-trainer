@@ -144,12 +144,14 @@ export default function DashboardPage() {
     return workoutLogs.find((log) => log.day_index === dayIndex);
   };
 
-  // Find next workout to do
+  // Find next workout to do (skip rest days)
   const getNextWorkout = () => {
     if (!plan?.exercises?.workouts) return null;
     const workouts = plan.exercises.workouts;
     for (let i = 0; i < workouts.length; i++) {
-      if (!isWorkoutCompleted(i)) {
+      const isRestDay =
+        workouts[i].isRestDay || workouts[i].exercises?.length === 0;
+      if (!isRestDay && !isWorkoutCompleted(i)) {
         return { workout: workouts[i], index: i };
       }
     }
@@ -217,7 +219,10 @@ export default function DashboardPage() {
   }
 
   const workouts = plan?.exercises?.workouts || [];
-  const totalWorkouts = workouts.length;
+  const workoutDays = workouts.filter(
+    (w: any) => !w.isRestDay && w.exercises?.length > 0
+  );
+  const totalWorkouts = workoutDays.length;
   const completedWorkouts = workoutLogs.length;
   const progressPercentage =
     totalWorkouts > 0 ? (completedWorkouts / totalWorkouts) * 100 : 0;
@@ -349,17 +354,53 @@ export default function DashboardPage() {
                   Week {plan?.week_number || 1} Schedule
                 </h2>
                 <Badge variant="secondary">
-                  {completedWorkouts}/{totalWorkouts} done
+                  {completedWorkouts}/
+                  {workouts.filter((w: any) => !w.isRestDay).length} done
                 </Badge>
               </div>
 
               {workouts.length > 0 ? (
                 <div className="space-y-3">
                   {workouts.map((workout: any, index: number) => {
-                    const completed = isWorkoutCompleted(index);
+                    const isRestDay =
+                      workout.isRestDay || workout.exercises?.length === 0;
+                    const completed = !isRestDay && isWorkoutCompleted(index);
                     const log = getWorkoutLog(index);
-                    const isNext = nextWorkout?.index === index;
+                    const isNext = nextWorkout?.index === index && !isRestDay;
 
+                    // Rest day card
+                    if (isRestDay) {
+                      return (
+                        <Card
+                          key={index}
+                          className="border-0 shadow-sm bg-slate-50 dark:bg-slate-800/50 opacity-75"
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-slate-200 dark:bg-slate-700 text-muted-foreground">
+                                <span className="text-xl">😴</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h3 className="font-semibold text-muted-foreground">
+                                  {workout.day}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                  Rest & Recovery
+                                </p>
+                              </div>
+                              <Badge
+                                variant="outline"
+                                className="text-muted-foreground"
+                              >
+                                Rest Day
+                              </Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    }
+
+                    // Workout day card
                     return (
                       <Card
                         key={index}
@@ -387,9 +428,7 @@ export default function DashboardPage() {
                               {completed ? (
                                 <CheckCircle2 className="h-6 w-6" />
                               ) : (
-                                <span className="font-bold text-lg">
-                                  {index + 1}
-                                </span>
+                                <Dumbbell className="h-5 w-5" />
                               )}
                             </div>
 

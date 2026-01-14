@@ -151,14 +151,14 @@ export default function OnboardingPage() {
       }
 
       // Check if user already has a plan
-      const { data: existingPlan } = await supabase
+      const { data: existingPlans } = await supabase
         .from("workout_plans")
         .select("id")
         .eq("user_id", user.id)
         .eq("is_active", true)
-        .single();
+        .limit(1);
 
-      if (existingPlan) {
+      if (existingPlans && existingPlans.length > 0) {
         router.push("/dashboard");
         return;
       }

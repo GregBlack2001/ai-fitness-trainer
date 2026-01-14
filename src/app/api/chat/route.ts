@@ -12,7 +12,35 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-const SYSTEM_PROMPT = `You are an expert AI fitness and nutrition coach with deep knowledge of exercise science, nutrition, and training programming. You have access to the user's profile, workout plan, and meal plan.
+// Get current day info
+const getCurrentDayInfo = () => {
+  const now = new Date();
+  const days = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+  const dayName = days[now.getDay()];
+  const dateStr = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  return { dayName, dateStr };
+};
+
+const getSystemPrompt = () => {
+  const { dayName, dateStr } = getCurrentDayInfo();
+
+  return `You are an expert AI fitness and nutrition coach with deep knowledge of exercise science, nutrition, and training programming. You have access to the user's profile, workout plan, and meal plan.
+
+CURRENT DATE: ${dateStr}
+TODAY IS: ${dayName}
 
 Your capabilities include:
 1. **Answering fitness & nutrition questions** - exercise form, recovery, motivation, diet advice, macro guidance
@@ -28,10 +56,11 @@ IMPORTANT GUIDELINES:
 - When swapping exercises, ensure the replacement targets the same muscle groups
 - For nutrition changes, maintain the user's calorie and macro targets
 - Keep responses concise but helpful
+- When the user mentions "today" or "today's workout", use ${dayName} as the reference day
+- If user asks to change "today's workout", modify the ${dayName} workout
 
-When you need to modify plans, use the available functions. Always confirm major changes with the user.
-
-Current date context: The user is working through their personalized fitness and nutrition plan.`;
+When you need to modify plans, use the available functions. Always confirm major changes with the user.`;
+};
 
 const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   // WORKOUT FUNCTIONS
@@ -192,6 +221,32 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           reason: { type: "string" },
         },
         required: ["day", "exercise_name", "reason"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "change_workout_day",
+      description: "Move a workout from one day to another day",
+      parameters: {
+        type: "object",
+        properties: {
+          from_day: {
+            type: "string",
+            description: "The current day of the workout (e.g., 'Monday')",
+          },
+          to_day: {
+            type: "string",
+            description:
+              "The new day to move the workout to (e.g., 'Saturday')",
+          },
+          reason: {
+            type: "string",
+            description: "Why the workout is being moved",
+          },
+        },
+        required: ["from_day", "to_day", "reason"],
       },
     },
   },
@@ -493,6 +548,61 @@ async function applyWorkoutModification(
             mod.notes || `Reduced intensity for ${args.injury_area}`;
         }
       }
+      break;
+    }
+
+    case "change_workout_day": {
+      const fromDayIdx = workouts.findIndex(
+        (w: any) => w.day.toLowerCase() === args.from_day.toLowerCase()
+      );
+      if (fromDayIdx === -1)
+        return {
+          success: false,
+          message: `Day "${args.from_day}" not found in your workout plan`,
+        };
+
+      // Check if to_day already exists
+      const toDayIdx = workouts.findIndex(
+        (w: any) => w.day.toLowerCase() === args.to_day.toLowerCase()
+      );
+
+      if (toDayIdx !== -1) {
+        // Swap the workouts - the from_day becomes a rest day, to_day gets the workout
+        const fromWorkout = { ...workouts[fromDayIdx] };
+        const toWorkout = { ...workouts[toDayIdx] };
+
+        // Move the workout content to the new day
+        workouts[toDayIdx] = {
+          ...fromWorkout,
+          day: args.to_day, // Keep the correct day name
+        };
+
+        // Make the old day a rest day (or swap with whatever was there)
+        workouts[fromDayIdx] = {
+          ...toWorkout,
+          day: args.from_day, // Keep the correct day name
+        };
+
+        console.log(`Swapped ${args.from_day} and ${args.to_day}`);
+      } else {
+        // to_day doesn't exist, just rename
+        workouts[fromDayIdx].day = args.to_day;
+      }
+
+      // Re-sort workouts by day of week
+      const dayOrder = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+      ];
+      workouts.sort((a: any, b: any) => {
+        return dayOrder.indexOf(a.day) - dayOrder.indexOf(b.day);
+      });
+
       break;
     }
 
@@ -883,7 +993,7 @@ ${
 
 Use this context to provide personalized advice and make modifications when requested.`;
 
-    const systemWithContext = SYSTEM_PROMPT + "\n\n" + contextMessage;
+    const systemWithContext = getSystemPrompt() + "\n\n" + contextMessage;
 
     // Call OpenAI
     const response = await openai.chat.completions.create({
@@ -926,6 +1036,7 @@ Use this context to provide personalized advice and make modifications when requ
             "add_exercise",
             "remove_exercise",
             "modify_for_injury",
+            "change_workout_day",
           ].includes(functionName)
         ) {
           if (workoutPlan) {

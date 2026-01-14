@@ -1,5 +1,9 @@
 // Simple in-memory rate limiter
-// For production, use Redis or a proper rate limiting service
+// NOTE: This doesn't work properly on serverless (Vercel) because each
+// function instance has its own memory. For production, use:
+// - Vercel KV (https://vercel.com/docs/storage/vercel-kv)
+// - Upstash Redis (https://upstash.com/)
+// - Or rely on OpenAI's built-in rate limits
 
 type RateLimitEntry = {
   count: number;
@@ -8,15 +12,21 @@ type RateLimitEntry = {
 
 const rateLimitMap = new Map<string, RateLimitEntry>();
 
-// Clean up old entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitMap.entries()) {
-    if (entry.resetTime < now) {
-      rateLimitMap.delete(key);
+// Detect if we're in a serverless environment
+const isServerless =
+  process.env.VERCEL === "1" || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+// Clean up old entries periodically (only in non-serverless)
+if (!isServerless) {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of rateLimitMap.entries()) {
+      if (entry.resetTime < now) {
+        rateLimitMap.delete(key);
+      }
     }
-  }
-}, 60000); // Clean every minute
+  }, 60000);
+}
 
 export type RateLimitConfig = {
   maxRequests: number; // Maximum requests allowed
@@ -51,6 +61,15 @@ export function checkRateLimit(
   identifier: string,
   configKey: string = "default"
 ): RateLimitResult {
+  // On serverless, skip rate limiting (use external service for production)
+  if (isServerless) {
+    return {
+      success: true,
+      remaining: 999,
+      resetIn: 60,
+    };
+  }
+
   const config = rateLimitConfigs[configKey] || rateLimitConfigs["default"];
   const now = Date.now();
   const key = `${configKey}:${identifier}`;

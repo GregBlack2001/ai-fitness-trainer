@@ -71,7 +71,12 @@ export async function POST(request: Request) {
       .eq("plan_id", currentPlan.id)
       .order("completed_at", { ascending: true });
 
-    const totalWorkouts = currentPlan.exercises?.workouts?.length || 0;
+    // Count only actual workout days (exclude rest days)
+    const allWorkouts = currentPlan.exercises?.workouts || [];
+    const workoutDays = allWorkouts.filter(
+      (w: any) => !w.isRestDay && w.exercises?.length > 0
+    );
+    const totalWorkouts = workoutDays.length;
     const completedWorkouts = workoutLogs?.length || 0;
 
     // Check if week is complete

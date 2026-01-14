@@ -249,15 +249,18 @@ export default function NutritionPage() {
               </span>
               <span className="font-medium">
                 ×
-                {
-                  {
+                {(() => {
+                  const multipliers: Record<string, string> = {
                     sedentary: "1.2",
                     light: "1.375",
                     moderate: "1.55",
                     active: "1.725",
                     very_active: "1.9",
-                  }[profile?.activity_level || "moderate"]
-                }
+                  };
+                  return (
+                    multipliers[profile?.activity_level as string] || "1.55"
+                  );
+                })()}
               </span>
             </div>
             <Separator />
