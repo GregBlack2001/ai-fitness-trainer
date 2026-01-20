@@ -18,7 +18,9 @@ import {
   Volume2,
   VolumeX,
   ArrowRight,
+  AlertCircle,
 } from "lucide-react";
+import { logEventClient } from "@/lib/events";
 
 type Message = {
   role: "user" | "assistant";
@@ -188,6 +190,9 @@ Let's start simple: **What's your main fitness goal?** For example:
       setMessages([{ role: "assistant", content: greeting }]);
       setInitialLoading(false);
 
+      // Log onboarding started event
+      logEventClient("onboarding_started");
+
       // Speak the greeting
       setTimeout(() => {
         if (voiceEnabled) speakText(greeting);
@@ -335,6 +340,10 @@ Let's start simple: **What's your main fitness goal?** For example:
         if (data.planCreated) {
           setPlanCreated(true);
           setProgress(100);
+
+          // Log completion events
+          logEventClient("onboarding_completed");
+          logEventClient("plan_generated", { source: "onboarding" });
         }
 
         // Speak the response
@@ -425,6 +434,25 @@ Let's start simple: **What's your main fitness goal?** For example:
         <div className="flex flex-col h-[calc(100vh-200px)]">
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+            {/* Disclaimer Notice */}
+            {messages.length === 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
+                <div className="flex gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-800 dark:text-amber-200">
+                    <p className="font-medium mb-1">Important Notice</p>
+                    <p>
+                      This app provides general fitness guidance only, not
+                      medical advice. Please consult a healthcare provider
+                      before starting any new exercise or nutrition programme.
+                      AI-generated recommendations may not be suitable for
+                      everyone.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {messages.map((message, index) => (
               <div
                 key={index}

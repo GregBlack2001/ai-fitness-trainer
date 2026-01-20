@@ -39,6 +39,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import Link from "next/link";
+import { logEventClient } from "@/lib/events";
 
 type WeightEntry = {
   id: string;
@@ -144,6 +145,9 @@ export default function ProgressPage() {
         console.log("No workout logs yet");
       }
 
+      // Log progress viewed event
+      logEventClient("progress_viewed");
+
       setLoading(false);
     };
 
@@ -206,6 +210,9 @@ export default function ProgressPage() {
         setWeightEntries((prev) => [...prev, data.entry]);
         setNewWeight("");
         setShowWeightDialog(false);
+
+        // Log weight logged event
+        logEventClient("weight_logged", { weight_kg: weight });
       }
     } catch (error) {
       console.error("Failed to add weight:", error);

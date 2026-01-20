@@ -31,6 +31,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { logEventClient } from "@/lib/events";
 
 type MacroInfo = {
   grams: number;
@@ -117,6 +118,8 @@ export default function NutritionPage() {
         }
         if (data.mealPlan) {
           setMealPlan(data.mealPlan);
+          // Log nutrition plan viewed event
+          logEventClient("nutrition_plan_viewed");
         }
       } catch (error) {
         console.error("Failed to load nutrition data:", error);
@@ -143,6 +146,10 @@ export default function NutritionPage() {
 
       if (data.success && data.mealPlan) {
         setMealPlan(data.mealPlan);
+        // Log nutrition plan generated event
+        logEventClient("nutrition_plan_generated", {
+          target_calories: calculations?.targetCalories,
+        });
       }
     } catch (error) {
       console.error("Failed to generate meal plan:", error);

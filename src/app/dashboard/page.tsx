@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { logEventClient } from "@/lib/events";
 
 type WorkoutLog = {
   id: string;
@@ -95,6 +96,9 @@ export default function DashboardPage() {
 
       // Load workout logs
       if (planData) {
+        // Log plan viewed event
+        logEventClient("plan_viewed", { plan_id: planData.id });
+
         try {
           const response = await fetch(
             `/api/workout/log?userId=${user.id}&limit=20`

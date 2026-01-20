@@ -22,8 +22,10 @@ import {
   Volume2,
   VolumeX,
   Utensils,
+  AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { logEventClient } from "@/lib/events";
 
 type Message = {
   role: "user" | "assistant";
@@ -219,6 +221,12 @@ What can I help you with today?`,
         setInput("");
         recognitionRef.current.start();
         setIsListening(true);
+
+        // Log voice usage event
+        logEventClient("voice_used", {
+          context: "ai_coach",
+          type: "speech_to_text",
+        });
       } catch (err: any) {
         console.error("Microphone permission error:", err);
         if (
@@ -304,6 +312,9 @@ What can I help you with today?`,
     setInput("");
     setIsLoading(true);
 
+    // Log user message event
+    logEventClient("coach_message_sent", { message_length: textToSend.length });
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -337,6 +348,22 @@ What can I help you with today?`,
             modifications: data.modifications,
           },
         ]);
+
+        // Log coach response event
+        logEventClient("coach_message_received", {
+          response_length: data.message?.length || 0,
+          plan_modified: data.planModified || false,
+          meal_plan_modified: data.mealPlanModified || false,
+        });
+
+        // Log plan update if modified
+        if (data.planModified) {
+          logEventClient("plan_updated", {
+            source: "ai_coach",
+            modifications: data.modifications,
+          });
+        }
+
         // Speak the response
         if (voiceEnabled) {
           speakText(data.message);
@@ -433,6 +460,19 @@ What can I help you with today?`,
         <div className="flex flex-col h-[calc(100vh-180px)]">
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+            {/* Disclaimer - shows only at start */}
+            {messages.length <= 1 && (
+              <div className="bg-muted/50 border rounded-lg p-2 mb-2">
+                <div className="flex gap-2 items-start">
+                  <AlertCircle className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground">
+                    AI Coach provides general fitness guidance only, not medical
+                    advice. Consult a healthcare provider for health concerns.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {messages.map((message, index) => (
               <div key={index}>
                 <div

@@ -32,6 +32,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import { logEventClient } from "@/lib/events";
 
 type Exercise = {
   name: string;
@@ -127,6 +128,13 @@ export default function WorkoutSessionPage() {
       );
       setExerciseLogs(logs);
       setLoading(false);
+
+      // Log workout started event
+      logEventClient("workout_started", {
+        day_index: dayIndex,
+        workout_day: plan.exercises.workouts[dayIndex].day,
+        workout_focus: plan.exercises.workouts[dayIndex].focus,
+      });
     };
 
     loadWorkout();
@@ -312,6 +320,9 @@ export default function WorkoutSessionPage() {
         (sum, log) => sum + log.completedSets.length,
         0
       );
+      const completionPercentage = Math.round(
+        (completedExercises / workout.exercises.length) * 100
+      );
 
       await fetch("/api/workout/log", {
         method: "POST",
@@ -330,6 +341,18 @@ export default function WorkoutSessionPage() {
           sets_completed: totalSetsCompleted,
           exercise_logs: exerciseLogs,
         }),
+      });
+
+      // Log workout completed event
+      logEventClient("workout_completed", {
+        day_index: dayIndex,
+        workout_day: workout.day,
+        workout_focus: workout.focus,
+        duration_seconds: totalElapsedTime,
+        exercises_completed: completedExercises,
+        total_exercises: workout.exercises.length,
+        sets_completed: totalSetsCompleted,
+        completion_percentage: completionPercentage,
       });
     } catch (error) {
       console.error("Failed to save workout:", error);

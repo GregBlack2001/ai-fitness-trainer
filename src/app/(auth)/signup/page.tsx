@@ -17,12 +17,14 @@ import {
   Dumbbell,
   Sparkles,
 } from "lucide-react";
+import { logEventClient } from "@/lib/events";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -85,6 +87,9 @@ export default function SignupPage() {
         setLoading(false);
         return;
       }
+
+      // Log signup completed event
+      await logEventClient("signup_completed", { method: "email" });
 
       router.push("/onboarding");
       router.refresh();
@@ -227,10 +232,36 @@ export default function SignupPage() {
                 )}
               </div>
 
+              {/* Disclaimer Agreement */}
+              <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="terms"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300"
+                  disabled={loading}
+                />
+                <label
+                  htmlFor="terms"
+                  className="text-xs text-muted-foreground leading-relaxed"
+                >
+                  I understand this app provides general fitness guidance only,
+                  not medical advice. I will consult a healthcare provider
+                  before starting any new exercise or nutrition programme.
+                  AI-generated content may not be suitable for everyone.
+                </label>
+              </div>
+
               <Button
                 type="submit"
                 className="w-full h-11 text-base font-medium"
-                disabled={loading || !allRequirementsMet || !passwordsMatch}
+                disabled={
+                  loading ||
+                  !allRequirementsMet ||
+                  !passwordsMatch ||
+                  !agreedToTerms
+                }
               >
                 {loading ? (
                   <>
