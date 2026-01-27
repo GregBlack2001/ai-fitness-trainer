@@ -8,6 +8,8 @@ const openai = new OpenAI({
 
 const SYSTEM_PROMPT = `You are an AI fitness coach collecting user information. Be BRIEF and conversational.
 
+IMPORTANT: The user's name is already known - DO NOT ask for their name.
+
 RULES:
 - Keep responses SHORT (1-2 sentences max)
 - Ask ONE question at a time
@@ -16,6 +18,7 @@ RULES:
 - NO markdown headers (###)
 - Just ask the next question directly
 - Call update_profile immediately when user provides data
+- NEVER ask for the user's name - it's already collected
 
 Example good responses:
 - "Got it! How old are you?"
@@ -26,22 +29,21 @@ Example BAD responses (too long):
 - "Great choice! Here's what your plan might look like: Day 1: Upper Body, Day 2: Lower Body..." ❌
 - "### Your Goals\nI'll create a personalized plan with..." ❌
 
-Data to collect (in order):
-1. full_name
-2. age
-3. gender
-4. height_cm
-5. weight_kg
-6. fitness_goal (lose weight, build muscle, maintain, etc.)
-7. fitness_level (beginner, intermediate, advanced)
-8. activity_level (sedentary, light, moderate, active, very_active)
-9. preferred_workout_days - Ask "Which days do you PREFER to work out?" (the plan will show all 7 days with rest days, but workouts will be on their preferred days)
-10. equipment_access (gym, home equipment, etc.)
-11. injuries (any injuries to work around)
-12. dietary_restrictions (vegetarian, vegan, gluten-free, etc.)
-13. food_allergies
-14. disliked_foods
-15. meals_per_day (how many meals they prefer)
+Data to collect (in order - DO NOT ask for name):
+1. age
+2. gender
+3. height_cm
+4. weight_kg
+5. fitness_goal (lose weight, build muscle, maintain, etc.)
+6. fitness_level (beginner, intermediate, advanced)
+7. activity_level (sedentary, light, moderate, active, very_active)
+8. preferred_workout_days - Ask "Which days do you PREFER to work out?" (the plan will show all 7 days with rest days, but workouts will be on their preferred days)
+9. equipment_access (gym, home equipment, etc.)
+10. injuries (any injuries to work around)
+11. dietary_restrictions (vegetarian, vegan, gluten-free, etc.)
+12. food_allergies
+13. disliked_foods
+14. meals_per_day (how many meals they prefer)
 
 After ALL data collected, call complete_onboarding.`;
 
@@ -109,7 +111,7 @@ export async function POST(request: Request) {
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     // Get the last user message
@@ -118,7 +120,7 @@ export async function POST(request: Request) {
     // Detect if user likely provided data
     const seemsLikeData =
       /\d+|kg|cm|lb|feet|foot|tall|weigh|male|female|man|woman|beginner|intermediate|advanced|sedentary|active|monday|tuesday|wednesday|thursday|friday|saturday|sunday|gym|dumbbell|barbell|equipment|injury|injure|vegetarian|vegan|gluten|dairy|allergy|allergic|halal|kosher|meals|breakfast|lunch|dinner/i.test(
-        lastMessage
+        lastMessage,
       );
 
     console.log("Last message:", lastMessage);
@@ -155,7 +157,7 @@ export async function POST(request: Request) {
         } catch (parseError) {
           console.warn(
             "Failed to parse function arguments:",
-            toolCall.function.arguments
+            toolCall.function.arguments,
           );
           continue;
         }
@@ -256,26 +258,14 @@ export async function POST(request: Request) {
 - Fitness Level: ${profile.fitness_level}
 - Preferred Workout Days: ${preferredDays.join(", ")}
 - Rest Days: ${restDays.join(", ")}
-- Equipment: ${
-            profile.equipment_access?.description ||
-            profile.equipment_access ||
-            "Full gym"
-          }
-- Injuries to work around: ${
-            profile.injuries?.length > 0 ? profile.injuries.join(", ") : "None"
-          }
+- Equipment: ${profile.equipment_access?.description || profile.equipment_access || "Full gym"}
+- Injuries to work around: ${profile.injuries?.length > 0 ? profile.injuries.join(", ") : "None"}
 
 IMPORTANT: Create ALL 7 days of the week. 
 - Workout days (${preferredDays.join(", ")}): Full workouts with exercises
 - Rest days (${restDays.join(", ")}): Mark as rest/recovery days
 
-Each workout should be ${
-            profile.fitness_level === "beginner"
-              ? "30-40"
-              : profile.fitness_level === "advanced"
-              ? "50-70"
-              : "40-55"
-          } minutes.
+Each workout should be ${profile.fitness_level === "beginner" ? "30-40" : profile.fitness_level === "advanced" ? "50-70" : "40-55"} minutes.
 
 Return a JSON object with ALL 7 days:
 {
@@ -323,7 +313,7 @@ Include warmup at the start of each workout day (not rest days). Return valid JS
           let workoutPlan;
           try {
             workoutPlan = JSON.parse(
-              planResponse.choices[0].message.content || "{}"
+              planResponse.choices[0].message.content || "{}",
             );
           } catch (e) {
             console.error("Failed to parse workout plan");
@@ -357,16 +347,10 @@ Include warmup at the start of each workout day (not rest days). Return valid JS
           return NextResponse.json({
             message: `🎉 Your personalized plan is ready!
 
-I've created a ${
-              profile.available_days?.length || 3
-            }-day workout plan tailored to your ${profile.fitness_goal} goal.
+I've created a ${profile.available_days?.length || 3}-day workout plan tailored to your ${profile.fitness_goal} goal.
 
 Your plan includes:
-${
-  workoutPlan.workouts
-    ?.map((w: any) => `• **${w.day}**: ${w.focus} (${w.duration_minutes} min)`)
-    .join("\n") || "Custom workouts for your schedule"
-}
+${workoutPlan.workouts?.map((w: any) => `• **${w.day}**: ${w.focus} (${w.duration_minutes} min)`).join("\n") || "Custom workouts for your schedule"}
 
 Click "Go to Dashboard" to see your full plan and start training!`,
             completed: true,
@@ -379,7 +363,7 @@ Click "Go to Dashboard" to see your full plan and start training!`,
 
     if (!assistantMessage.content && toolCalls?.length) {
       console.log(
-        "AI called function but no message. Making follow-up call..."
+        "AI called function but no message. Making follow-up call...",
       );
 
       const followUpMessages = [
@@ -422,7 +406,7 @@ Click "Go to Dashboard" to see your full plan and start training!`,
     console.error("❌ Onboarding error:", error);
     return NextResponse.json(
       { error: "Failed to process chat" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

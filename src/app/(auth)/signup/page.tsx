@@ -16,10 +16,12 @@ import {
   Loader2,
   Dumbbell,
   Sparkles,
+  User,
 } from "lucide-react";
 import { logEventClient } from "@/lib/events";
 
 export default function SignupPage() {
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -45,10 +47,16 @@ export default function SignupPage() {
   const allRequirementsMet = requirements.every((r) => r.met);
   const passwordsMatch =
     password === confirmPassword && confirmPassword.length > 0;
+  const nameValid = fullName.trim().length >= 2;
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!nameValid) {
+      setError("Please enter your name");
+      return;
+    }
 
     if (!allRequirementsMet) {
       setError("Password does not meet all requirements");
@@ -66,7 +74,7 @@ export default function SignupPage() {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, fullName: fullName.trim() }),
       });
 
       const data = await response.json();
@@ -129,6 +137,20 @@ export default function SignupPage() {
                   {error}
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Full Name</Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="John Smith"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  disabled={loading}
+                  className="h-11"
+                />
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -258,6 +280,7 @@ export default function SignupPage() {
                 className="w-full h-11 text-base font-medium"
                 disabled={
                   loading ||
+                  !nameValid ||
                   !allRequirementsMet ||
                   !passwordsMatch ||
                   !agreedToTerms
