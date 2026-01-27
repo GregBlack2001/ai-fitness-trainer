@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     // Get user profile
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     if (!currentPlan) {
       return NextResponse.json(
         { error: "No active workout plan found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
     // Count only actual workout days (exclude rest days)
     const allWorkouts = currentPlan.exercises?.workouts || [];
     const workoutDays = allWorkouts.filter(
-      (w: any) => !w.isRestDay && w.exercises?.length > 0
+      (w: any) => !w.isRestDay && w.exercises?.length > 0,
     );
     const totalWorkouts = workoutDays.length;
     const completedWorkouts = workoutLogs?.length || 0;
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
           completedWorkouts,
           totalWorkouts,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     const totalMinutes =
       workoutLogs?.reduce(
         (sum, log) => sum + Math.round(log.duration_seconds / 60),
-        0
+        0,
       ) || 0;
 
     // Analyze performance to determine progression
@@ -135,16 +135,11 @@ export async function POST(request: Request) {
     const prompt = `Generate Week ${nextWeekNumber} workout plan for this user:
 
 PROFILE:
-- Name: ${profile.full_name}
 - Fitness Level: ${profile.fitness_level}
 - Goal: ${profile.fitness_goal}
-- Available Days: ${
-      profile.available_days?.join(", ") || "Monday, Wednesday, Friday"
-    }
+- Available Days: ${profile.available_days?.join(", ") || "Monday, Wednesday, Friday"}
 - Equipment: ${profile.equipment_access?.description || "Full gym"}
-- Injuries: ${
-      profile.injuries?.length > 0 ? profile.injuries.join(", ") : "None"
-    }
+- Injuries: ${profile.injuries?.length > 0 ? profile.injuries.join(", ") : "None"}
 
 LAST WEEK PERFORMANCE (Week ${currentPlan.week_number}):
 - Workouts Completed: ${completedWorkouts}/${totalWorkouts}
@@ -159,12 +154,8 @@ ${currentPlan.exercises?.workouts
   ?.map(
     (w: any) => `
 ${w.day} - ${w.focus}:
-${w.exercises
-  ?.map(
-    (e: any) => `  - ${e.name}: ${e.sets}x${e.reps || e.duration_seconds + "s"}`
-  )
-  .join("\n")}
-`
+${w.exercises?.map((e: any) => `  - ${e.name}: ${e.sets}x${e.reps || e.duration_seconds + "s"}`).join("\n")}
+`,
   )
   .join("\n")}
 
@@ -178,13 +169,13 @@ ${
 - Introduce more challenging variations
 `
     : progressionLevel === "decrease"
-    ? `
+      ? `
 - Reduce sets by 1 OR reps by 2-3
 - Remove the most difficult exercise from each day
 - Increase rest periods by 15-30 seconds
 - Use easier exercise variations
 `
-    : `
+      : `
 - Keep similar volume with slight variations
 - Swap 1-2 exercises for variety
 - Maintain rest periods
@@ -193,23 +184,11 @@ ${
 }
 
 REQUIREMENTS:
-1. Create workouts for EXACTLY these days: ${
-      profile.available_days?.join(", ") || "Monday, Wednesday, Friday"
-    }
-2. Each workout should be ${
-      profile.fitness_level === "beginner"
-        ? "30-40"
-        : profile.fitness_level === "advanced"
-        ? "50-70"
-        : "40-55"
-    } minutes
+1. Create workouts for EXACTLY these days: ${profile.available_days?.join(", ") || "Monday, Wednesday, Friday"}
+2. Each workout should be ${profile.fitness_level === "beginner" ? "30-40" : profile.fitness_level === "advanced" ? "50-70" : "40-55"} minutes
 3. Include warmup (5 min) at the start of each workout
 4. Apply the ${progressionLevel.toUpperCase()} progression
-5. Keep exercises appropriate for: ${
-      profile.injuries?.length > 0
-        ? "working around " + profile.injuries.join(", ")
-        : "no injury limitations"
-    }
+5. Keep exercises appropriate for: ${profile.injuries?.length > 0 ? "working around " + profile.injuries.join(", ") : "no injury limitations"}
 6. Include rest_seconds for each exercise
 7. Add helpful form notes
 
@@ -249,7 +228,7 @@ Return valid JSON only.`;
       nextWeekNumber,
       "with",
       progressionLevel,
-      "progression"
+      "progression",
     );
 
     const response = await openai.chat.completions.create({
@@ -271,7 +250,7 @@ Return valid JSON only.`;
     if (!planText) {
       return NextResponse.json(
         { error: "Failed to generate plan" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -282,14 +261,14 @@ Return valid JSON only.`;
       console.error("Failed to parse plan JSON:", e);
       return NextResponse.json(
         { error: "Invalid plan format" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     console.log(
       "✅ New plan generated with",
       newPlanData.workouts?.length,
-      "workouts"
+      "workouts",
     );
 
     // IMPORTANT: Deactivate ALL existing active plans for this user FIRST
@@ -302,7 +281,7 @@ Return valid JSON only.`;
 
     console.log(
       "Found active plans to deactivate:",
-      existingPlans?.length || 0
+      existingPlans?.length || 0,
     );
 
     if (existingPlans && existingPlans.length > 0) {
@@ -317,7 +296,7 @@ Return valid JSON only.`;
             "Failed to deactivate plan",
             plan.id,
             ":",
-            deactivateError
+            deactivateError,
           );
         } else {
           console.log("✅ Deactivated plan:", plan.id);
@@ -335,7 +314,7 @@ Return valid JSON only.`;
     if (stillActive && stillActive.length > 0) {
       console.error(
         "❌ Still have active plans after deactivation:",
-        stillActive
+        stillActive,
       );
       // Force deactivate again
       await supabase
@@ -369,7 +348,7 @@ Return valid JSON only.`;
       console.error("Failed to save plan:", saveError);
       return NextResponse.json(
         { error: "Failed to save new plan" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -390,7 +369,7 @@ Return valid JSON only.`;
     console.error("❌ Next week generation error:", error);
     return NextResponse.json(
       { error: "Failed to generate next week" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -407,7 +386,7 @@ export async function GET(request: Request) {
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     // Get current plan
@@ -456,7 +435,7 @@ export async function GET(request: Request) {
     console.error("❌ Check eligibility error:", error);
     return NextResponse.json(
       { error: "Failed to check eligibility" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

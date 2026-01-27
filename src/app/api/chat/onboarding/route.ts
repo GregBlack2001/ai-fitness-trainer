@@ -251,7 +251,6 @@ export async function POST(request: Request) {
           const restDays = allDays.filter((d) => !preferredDays.includes(d));
 
           const planPrompt = `Create a week 1 workout plan for:
-- Name: ${profile.full_name}
 - Age: ${profile.age}
 - Gender: ${profile.gender}
 - Goal: ${profile.fitness_goal}

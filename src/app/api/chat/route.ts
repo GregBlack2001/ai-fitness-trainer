@@ -398,20 +398,20 @@ async function applyWorkoutModification(
   planId: string,
   currentPlan: any,
   functionName: string,
-  args: any
+  args: any,
 ): Promise<{ success: boolean; message: string }> {
   const workouts = [...currentPlan.workouts];
 
   switch (functionName) {
     case "swap_exercise": {
       const dayIdx = workouts.findIndex(
-        (w: any) => w.day.toLowerCase() === args.day.toLowerCase()
+        (w: any) => w.day.toLowerCase() === args.day.toLowerCase(),
       );
       if (dayIdx === -1)
         return { success: false, message: `Day "${args.day}" not found` };
 
       const exIdx = workouts[dayIdx].exercises.findIndex((e: any) =>
-        e.name.toLowerCase().includes(args.old_exercise.toLowerCase())
+        e.name.toLowerCase().includes(args.old_exercise.toLowerCase()),
       );
       if (exIdx === -1)
         return {
@@ -436,7 +436,7 @@ async function applyWorkoutModification(
           ? workouts
           : workouts.filter(
               (w: any) =>
-                w.day.toLowerCase() === args.specific_day?.toLowerCase()
+                w.day.toLowerCase() === args.specific_day?.toLowerCase(),
             );
 
       for (const workout of targetDays) {
@@ -444,19 +444,19 @@ async function applyWorkoutModification(
           if (args.sets_change) {
             exercise.sets = Math.max(
               1,
-              (exercise.sets || 3) + args.sets_change
+              (exercise.sets || 3) + args.sets_change,
             );
           }
           if (args.reps_change) {
             exercise.reps = Math.max(
               1,
-              (exercise.reps || 10) + args.reps_change
+              (exercise.reps || 10) + args.reps_change,
             );
           }
           if (args.rest_change_seconds) {
             exercise.rest_seconds = Math.max(
               15,
-              (exercise.rest_seconds || 60) + args.rest_change_seconds
+              (exercise.rest_seconds || 60) + args.rest_change_seconds,
             );
           }
         }
@@ -466,7 +466,7 @@ async function applyWorkoutModification(
 
     case "add_exercise": {
       const dayIdx = workouts.findIndex(
-        (w: any) => w.day.toLowerCase() === args.day.toLowerCase()
+        (w: any) => w.day.toLowerCase() === args.day.toLowerCase(),
       );
       if (dayIdx === -1)
         return { success: false, message: `Day "${args.day}" not found` };
@@ -486,7 +486,7 @@ async function applyWorkoutModification(
         const warmupIdx = workouts[dayIdx].exercises.findIndex(
           (e: any) =>
             e.name.toLowerCase().includes("warmup") ||
-            e.name.toLowerCase().includes("warm-up")
+            e.name.toLowerCase().includes("warm-up"),
         );
         workouts[dayIdx].exercises.splice(warmupIdx + 1, 0, newExercise);
       } else {
@@ -497,13 +497,13 @@ async function applyWorkoutModification(
 
     case "remove_exercise": {
       const dayIdx = workouts.findIndex(
-        (w: any) => w.day.toLowerCase() === args.day.toLowerCase()
+        (w: any) => w.day.toLowerCase() === args.day.toLowerCase(),
       );
       if (dayIdx === -1)
         return { success: false, message: `Day "${args.day}" not found` };
 
       const exIdx = workouts[dayIdx].exercises.findIndex((e: any) =>
-        e.name.toLowerCase().includes(args.exercise_name.toLowerCase())
+        e.name.toLowerCase().includes(args.exercise_name.toLowerCase()),
       );
       if (exIdx === -1)
         return {
@@ -518,12 +518,12 @@ async function applyWorkoutModification(
     case "modify_for_injury": {
       for (const mod of args.modifications) {
         const dayIdx = workouts.findIndex(
-          (w: any) => w.day.toLowerCase() === mod.day.toLowerCase()
+          (w: any) => w.day.toLowerCase() === mod.day.toLowerCase(),
         );
         if (dayIdx === -1) continue;
 
         const exIdx = workouts[dayIdx].exercises.findIndex((e: any) =>
-          e.name.toLowerCase().includes(mod.exercise_to_modify.toLowerCase())
+          e.name.toLowerCase().includes(mod.exercise_to_modify.toLowerCase()),
         );
         if (exIdx === -1) continue;
 
@@ -542,7 +542,7 @@ async function applyWorkoutModification(
         } else if (mod.action === "reduce_intensity") {
           workouts[dayIdx].exercises[exIdx].sets = Math.max(
             1,
-            workouts[dayIdx].exercises[exIdx].sets - 1
+            workouts[dayIdx].exercises[exIdx].sets - 1,
           );
           workouts[dayIdx].exercises[exIdx].notes =
             mod.notes || `Reduced intensity for ${args.injury_area}`;
@@ -553,7 +553,7 @@ async function applyWorkoutModification(
 
     case "change_workout_day": {
       const fromDayIdx = workouts.findIndex(
-        (w: any) => w.day.toLowerCase() === args.from_day.toLowerCase()
+        (w: any) => w.day.toLowerCase() === args.from_day.toLowerCase(),
       );
       if (fromDayIdx === -1)
         return {
@@ -563,7 +563,7 @@ async function applyWorkoutModification(
 
       // Check if to_day already exists
       const toDayIdx = workouts.findIndex(
-        (w: any) => w.day.toLowerCase() === args.to_day.toLowerCase()
+        (w: any) => w.day.toLowerCase() === args.to_day.toLowerCase(),
       );
 
       if (toDayIdx !== -1) {
@@ -632,14 +632,14 @@ async function applyNutritionModification(
   functionName: string,
   args: any,
   userId: string,
-  profile: any
+  profile: any,
 ): Promise<{ success: boolean; message: string }> {
   const days = [...(currentMealPlan.days || [])];
 
   switch (functionName) {
     case "swap_meal": {
       const dayIdx = days.findIndex(
-        (d: any) => d.day.toLowerCase() === args.day.toLowerCase()
+        (d: any) => d.day.toLowerCase() === args.day.toLowerCase(),
       );
       if (dayIdx === -1)
         return {
@@ -648,7 +648,7 @@ async function applyNutritionModification(
         };
 
       const mealIdx = days[dayIdx].meals.findIndex(
-        (m: any) => m.name.toLowerCase() === args.meal_name.toLowerCase()
+        (m: any) => m.name.toLowerCase() === args.meal_name.toLowerCase(),
       );
       if (mealIdx === -1)
         return {
@@ -659,19 +659,19 @@ async function applyNutritionModification(
       // Calculate new totals
       const totalCalories = args.new_foods.reduce(
         (sum: number, f: any) => sum + f.calories,
-        0
+        0,
       );
       const totalProtein = args.new_foods.reduce(
         (sum: number, f: any) => sum + f.protein,
-        0
+        0,
       );
       const totalCarbs = args.new_foods.reduce(
         (sum: number, f: any) => sum + f.carbs,
-        0
+        0,
       );
       const totalFat = args.new_foods.reduce(
         (sum: number, f: any) => sum + f.fat,
-        0
+        0,
       );
 
       days[dayIdx].meals[mealIdx] = {
@@ -687,19 +687,19 @@ async function applyNutritionModification(
       days[dayIdx].dailyTotals = {
         calories: days[dayIdx].meals.reduce(
           (sum: number, m: any) => sum + m.totalCalories,
-          0
+          0,
         ),
         protein: days[dayIdx].meals.reduce(
           (sum: number, m: any) => sum + m.totalProtein,
-          0
+          0,
         ),
         carbs: days[dayIdx].meals.reduce(
           (sum: number, m: any) => sum + m.totalCarbs,
-          0
+          0,
         ),
         fat: days[dayIdx].meals.reduce(
           (sum: number, m: any) => sum + m.totalFat,
-          0
+          0,
         ),
       };
       break;
@@ -707,13 +707,13 @@ async function applyNutritionModification(
 
     case "adjust_meal_portions": {
       const dayIdx = days.findIndex(
-        (d: any) => d.day.toLowerCase() === args.day.toLowerCase()
+        (d: any) => d.day.toLowerCase() === args.day.toLowerCase(),
       );
       if (dayIdx === -1)
         return { success: false, message: `Day "${args.day}" not found` };
 
       const mealIdx = days[dayIdx].meals.findIndex(
-        (m: any) => m.name.toLowerCase() === args.meal_name.toLowerCase()
+        (m: any) => m.name.toLowerCase() === args.meal_name.toLowerCase(),
       );
       if (mealIdx === -1)
         return {
@@ -736,38 +736,38 @@ async function applyNutritionModification(
 
       meal.totalCalories = meal.foods.reduce(
         (sum: number, f: any) => sum + f.calories,
-        0
+        0,
       );
       meal.totalProtein = meal.foods.reduce(
         (sum: number, f: any) => sum + f.protein,
-        0
+        0,
       );
       meal.totalCarbs = meal.foods.reduce(
         (sum: number, f: any) => sum + f.carbs,
-        0
+        0,
       );
       meal.totalFat = meal.foods.reduce(
         (sum: number, f: any) => sum + f.fat,
-        0
+        0,
       );
 
       // Recalculate daily totals
       days[dayIdx].dailyTotals = {
         calories: days[dayIdx].meals.reduce(
           (sum: number, m: any) => sum + m.totalCalories,
-          0
+          0,
         ),
         protein: days[dayIdx].meals.reduce(
           (sum: number, m: any) => sum + m.totalProtein,
-          0
+          0,
         ),
         carbs: days[dayIdx].meals.reduce(
           (sum: number, m: any) => sum + m.totalCarbs,
-          0
+          0,
         ),
         fat: days[dayIdx].meals.reduce(
           (sum: number, m: any) => sum + m.totalFat,
-          0
+          0,
         ),
       };
       break;
@@ -785,7 +785,7 @@ async function applyNutritionModification(
         }
         if (args.remove_restrictions) {
           restrictions = restrictions.filter(
-            (r: string) => !args.remove_restrictions.includes(r)
+            (r: string) => !args.remove_restrictions.includes(r),
           );
         }
         updates.dietary_restrictions = restrictions;
@@ -798,7 +798,7 @@ async function applyNutritionModification(
         }
         if (args.remove_allergies) {
           allergies = allergies.filter(
-            (a: string) => !args.remove_allergies.includes(a)
+            (a: string) => !args.remove_allergies.includes(a),
           );
         }
         updates.food_allergies = allergies;
@@ -811,7 +811,7 @@ async function applyNutritionModification(
         }
         if (args.remove_disliked) {
           disliked = disliked.filter(
-            (d: string) => !args.remove_disliked.includes(d)
+            (d: string) => !args.remove_disliked.includes(d),
           );
         }
         updates.disliked_foods = disliked;
@@ -874,7 +874,7 @@ export async function POST(request: Request) {
       if (!messageValidation.valid) {
         return NextResponse.json(
           { error: messageValidation.error },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -884,7 +884,7 @@ export async function POST(request: Request) {
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     // Fetch user data
@@ -915,35 +915,18 @@ export async function POST(request: Request) {
       .order("completed_at", { ascending: false })
       .limit(5);
 
-    // Build context
+    // Build context (no name sent to OpenAI for privacy)
     const contextMessage = `
 CURRENT USER CONTEXT:
-- Name: ${profile?.full_name || "User"}
 - Fitness Level: ${profile?.fitness_level || "intermediate"}
 - Goal: ${profile?.fitness_goal || "general fitness"}
 - Activity Level: ${profile?.activity_level || "moderate"}
 - Available Days: ${profile?.available_days?.join(", ") || "flexible"}
-- Equipment: ${
-      profile?.equipment_access?.description || "standard gym equipment"
-    }
-- Injuries: ${
-      profile?.injuries?.length > 0 ? profile.injuries.join(", ") : "None"
-    }
-- Dietary Restrictions: ${
-      profile?.dietary_restrictions?.length > 0
-        ? profile.dietary_restrictions.join(", ")
-        : "None"
-    }
-- Food Allergies: ${
-      profile?.food_allergies?.length > 0
-        ? profile.food_allergies.join(", ")
-        : "None"
-    }
-- Disliked Foods: ${
-      profile?.disliked_foods?.length > 0
-        ? profile.disliked_foods.join(", ")
-        : "None"
-    }
+- Equipment: ${profile?.equipment_access?.description || "standard gym equipment"}
+- Injuries: ${profile?.injuries?.length > 0 ? profile.injuries.join(", ") : "None"}
+- Dietary Restrictions: ${profile?.dietary_restrictions?.length > 0 ? profile.dietary_restrictions.join(", ") : "None"}
+- Food Allergies: ${profile?.food_allergies?.length > 0 ? profile.food_allergies.join(", ") : "None"}
+- Disliked Foods: ${profile?.disliked_foods?.length > 0 ? profile.disliked_foods.join(", ") : "None"}
 
 CURRENT WORKOUT PLAN (Week ${workoutPlan?.week_number || 1}):
 ${
@@ -951,45 +934,27 @@ ${
     ?.map(
       (w: any) => `
 ${w.day} - ${w.focus} (${w.duration_minutes} min):
-${w.exercises
-  ?.map(
-    (e: any) =>
-      `  • ${e.name}: ${e.sets} sets x ${e.reps || e.duration_seconds + "s"}`
-  )
-  .join("\n")}
-`
+${w.exercises?.map((e: any) => `  • ${e.name}: ${e.sets} sets x ${e.reps || e.duration_seconds + "s"}`).join("\n")}
+`,
     )
     .join("\n") || "No active workout plan"
 }
 
 CURRENT MEAL PLAN:
-Target: ${mealPlan?.target_calories || "N/A"} kcal | Protein: ${
-      mealPlan?.target_protein || "N/A"
-    }g | Carbs: ${mealPlan?.target_carbs || "N/A"}g | Fat: ${
-      mealPlan?.target_fat || "N/A"
-    }g
+Target: ${mealPlan?.target_calories || "N/A"} kcal | Protein: ${mealPlan?.target_protein || "N/A"}g | Carbs: ${mealPlan?.target_carbs || "N/A"}g | Fat: ${mealPlan?.target_fat || "N/A"}g
 ${
   mealPlan?.meals?.days
     ?.slice(0, 2)
     .map(
       (d: any) => `
-${d.day}: ${d.meals?.map((m: any) => m.name).join(", ")}`
+${d.day}: ${d.meals?.map((m: any) => m.name).join(", ")}`,
     )
     .join("") || "No active meal plan"
 }
 ...and more days
 
 RECENT WORKOUTS:
-${
-  recentLogs
-    ?.map(
-      (log: any) =>
-        `- ${log.workout_day}: ${log.completion_percentage}% (${Math.round(
-          log.duration_seconds / 60
-        )} min)`
-    )
-    .join("\n") || "No recent workouts"
-}
+${recentLogs?.map((log: any) => `- ${log.workout_day}: ${log.completion_percentage}% (${Math.round(log.duration_seconds / 60)} min)`).join("\n") || "No recent workouts"}
 
 Use this context to provide personalized advice and make modifications when requested.`;
 
@@ -1045,7 +1010,7 @@ Use this context to provide personalized advice and make modifications when requ
               workoutPlan.id,
               workoutPlan.exercises,
               functionName,
-              args
+              args,
             );
             if (result.success) planModified = true;
             modificationResults.push(result.message);
@@ -1071,7 +1036,7 @@ Use this context to provide personalized advice and make modifications when requ
               functionName,
               args,
               userId,
-              profile
+              profile,
             );
             if (result.success) mealPlanModified = true;
             modificationResults.push(result.message);
@@ -1088,7 +1053,7 @@ Use this context to provide personalized advice and make modifications when requ
               ? [...currentInjuries, args.injury]
               : currentInjuries.filter(
                   (i: string) =>
-                    !i.toLowerCase().includes(args.injury.toLowerCase())
+                    !i.toLowerCase().includes(args.injury.toLowerCase()),
                 );
 
           await supabase
@@ -1096,9 +1061,7 @@ Use this context to provide personalized advice and make modifications when requ
             .update({ injuries: newInjuries })
             .eq("id", userId);
           modificationResults.push(
-            `${args.add_or_remove === "add" ? "Added" : "Removed"} injury: ${
-              args.injury
-            }`
+            `${args.add_or_remove === "add" ? "Added" : "Removed"} injury: ${args.injury}`,
           );
         }
       }
@@ -1143,7 +1106,7 @@ Use this context to provide personalized advice and make modifications when requ
     console.error("❌ Chat error:", error);
     return NextResponse.json(
       { error: "Failed to process chat message" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -103,13 +103,13 @@ export default function OnboardingPage() {
 
           if (event.error === "not-allowed") {
             alert(
-              "Microphone access denied. Please allow microphone access in your browser settings and refresh the page."
+              "Microphone access denied. Please allow microphone access in your browser settings and refresh the page.",
             );
           } else if (event.error === "no-speech") {
             // User didn't say anything, this is okay
           } else if (event.error === "network") {
             alert(
-              "Network error. Speech recognition requires an internet connection."
+              "Network error. Speech recognition requires an internet connection.",
             );
           }
         };
@@ -167,17 +167,10 @@ export default function OnboardingPage() {
 
       setUserId(user.id);
 
-      // Get user's name from profile
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .single();
+      setUserId(user.id);
 
-      const userName = profile?.full_name?.split(" ")[0] || "there";
-
-      // Start the conversation
-      const greeting = `Hey ${userName}! 👋 I'm your AI fitness coach, and I'm excited to create a personalized workout and nutrition plan just for you!
+      // Start the conversation (no name sent to AI)
+      const greeting = `Hey there! 👋 I'm your AI fitness coach, and I'm excited to create a personalized workout and nutrition plan just for you!
 
 I'll ask you a few questions to understand your goals, schedule, and preferences. You can type your responses or tap the 🎤 microphone to speak to me!
 
@@ -228,11 +221,11 @@ Let's start simple: **What's your main fitness goal?** For example:
           err.name === "PermissionDeniedError"
         ) {
           alert(
-            "Microphone access is required for voice input. Please allow microphone access in your browser settings and try again."
+            "Microphone access is required for voice input. Please allow microphone access in your browser settings and try again.",
           );
         } else if (err.name === "NotFoundError") {
           alert(
-            "No microphone found. Please connect a microphone and try again."
+            "No microphone found. Please connect a microphone and try again.",
           );
         } else {
           alert("Could not access microphone: " + err.message);
@@ -268,7 +261,7 @@ Let's start simple: **What's your main fitness goal?** For example:
         v.name.includes("Google") ||
         v.name.includes("Natural") ||
         v.name.includes("Samantha") ||
-        v.lang.startsWith("en")
+        v.lang.startsWith("en"),
     );
     if (preferredVoice) {
       utterance.voice = preferredVoice;
@@ -548,9 +541,7 @@ Let's start simple: **What's your main fitness goal?** For example:
                   <Button
                     variant={isListening ? "destructive" : "outline"}
                     size="lg"
-                    className={`h-12 px-4 ${
-                      isListening ? "animate-pulse" : ""
-                    }`}
+                    className={`h-12 px-4 ${isListening ? "animate-pulse" : ""}`}
                     onClick={toggleListening}
                     title={isListening ? "Stop listening" : "Start voice input"}
                   >
