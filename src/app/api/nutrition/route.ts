@@ -11,7 +11,7 @@ function calculateBMR(
   weight_kg: number,
   height_cm: number,
   age: number,
-  gender: string
+  gender: string,
 ): number {
   if (gender?.toLowerCase() === "male") {
     return 10 * weight_kg + 6.25 * height_cm - 5 * age + 5;
@@ -53,7 +53,7 @@ function calculateTargetCalories(tdee: number, goal: string): number {
 function calculateMacros(
   targetCalories: number,
   weight_kg: number,
-  goal: string
+  goal: string,
 ) {
   // Protein: 2g per kg (minimum for muscle building/retention)
   const proteinGrams = Math.round(weight_kg * 2);
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     // Get user profile
@@ -105,7 +105,7 @@ export async function GET(request: Request) {
       profile.weight_kg || 70,
       profile.height_cm || 170,
       profile.age || 30,
-      profile.gender || "male"
+      profile.gender || "male",
     );
 
     const tdee = calculateTDEE(bmr, profile.activity_level || "moderate");
@@ -113,7 +113,7 @@ export async function GET(request: Request) {
     const macros = calculateMacros(
       targetCalories,
       profile.weight_kg || 70,
-      profile.fitness_goal
+      profile.fitness_goal,
     );
 
     // Get existing meal plan if any
@@ -149,7 +149,7 @@ export async function GET(request: Request) {
     console.error("Nutrition GET error:", error);
     return NextResponse.json(
       { error: "Failed to get nutrition info" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     // Get user profile
@@ -185,49 +185,39 @@ export async function POST(request: Request) {
       profile.weight_kg || 70,
       profile.height_cm || 170,
       profile.age || 30,
-      profile.gender || "male"
+      profile.gender || "male",
     );
     const tdee = calculateTDEE(bmr, profile.activity_level || "moderate");
     const targetCalories = calculateTargetCalories(tdee, profile.fitness_goal);
     const macros = calculateMacros(
       targetCalories,
       profile.weight_kg || 70,
-      profile.fitness_goal
+      profile.fitness_goal,
     );
 
     const mealsPerDay = profile.meals_per_day || 3;
 
     const prompt = `Create a complete 7-day meal plan for this user.
 
-NUTRITIONAL TARGETS (per day):
-- Calories: ${macros.calories} kcal
-- Protein: ${macros.protein.grams}g (minimum 2g per kg body weight)
+MANDATORY NUTRITIONAL TARGETS (per day) - YOU MUST HIT THESE EXACTLY:
+- Calories: EXACTLY ${macros.calories} kcal (NOT 2000, NOT 2500, EXACTLY ${macros.calories})
+- Protein: ${macros.protein.grams}g
 - Carbs: ${macros.carbs.grams}g
 - Fat: ${macros.fat.grams}g
+
+IMPORTANT: The daily calorie target is ${macros.calories} kcal. Each day's dailyTotals.calories MUST equal ${macros.calories} (within 50 calories).
 
 USER PROFILE:
 - Goal: ${profile.fitness_goal || "general fitness"}
 - Meals per day: ${mealsPerDay}
-- Dietary restrictions: ${
-      profile.dietary_restrictions?.length > 0
-        ? profile.dietary_restrictions.join(", ")
-        : "None"
-    }
-- Food allergies: ${
-      profile.food_allergies?.length > 0
-        ? profile.food_allergies.join(", ")
-        : "None"
-    }
-- Disliked foods: ${
-      profile.disliked_foods?.length > 0
-        ? profile.disliked_foods.join(", ")
-        : "None"
-    }
+- Dietary restrictions: ${profile.dietary_restrictions?.length > 0 ? profile.dietary_restrictions.join(", ") : "None"}
+- Food allergies: ${profile.food_allergies?.length > 0 ? profile.food_allergies.join(", ") : "None"}
+- Disliked foods: ${profile.disliked_foods?.length > 0 ? profile.disliked_foods.join(", ") : "None"}
 
 CRITICAL REQUIREMENTS:
 1. You MUST create EXACTLY 7 days: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
 2. Each day MUST have exactly ${mealsPerDay} meals
-3. Each day should hit the calorie and macro targets (within 5%)
+3. Each day MUST total ${macros.calories} calories (within 50 kcal) - THIS IS CRITICAL
 4. NEVER include any foods from allergies list
 5. NEVER include any disliked foods
 6. Follow all dietary restrictions strictly
@@ -260,46 +250,46 @@ Return a JSON object with this EXACT structure - ALL 7 DAYS REQUIRED:
         }
       ],
       "dailyTotals": {
-        "calories": 2000,
-        "protein": 150,
-        "carbs": 200,
-        "fat": 70
+        "calories": ${macros.calories},
+        "protein": ${macros.protein.grams},
+        "carbs": ${macros.carbs.grams},
+        "fat": ${macros.fat.grams}
       }
     },
     {
       "day": "Tuesday",
       "meals": [...],
-      "dailyTotals": {...}
+      "dailyTotals": {"calories": ${macros.calories}, ...}
     },
     {
       "day": "Wednesday",
       "meals": [...],
-      "dailyTotals": {...}
+      "dailyTotals": {"calories": ${macros.calories}, ...}
     },
     {
       "day": "Thursday",
       "meals": [...],
-      "dailyTotals": {...}
+      "dailyTotals": {"calories": ${macros.calories}, ...}
     },
     {
       "day": "Friday",
       "meals": [...],
-      "dailyTotals": {...}
+      "dailyTotals": {"calories": ${macros.calories}, ...}
     },
     {
       "day": "Saturday",
       "meals": [...],
-      "dailyTotals": {...}
+      "dailyTotals": {"calories": ${macros.calories}, ...}
     },
     {
       "day": "Sunday",
       "meals": [...],
-      "dailyTotals": {...}
+      "dailyTotals": {"calories": ${macros.calories}, ...}
     }
   ]
 }
 
-IMPORTANT: The "days" array MUST contain exactly 7 objects, one for each day of the week.
+IMPORTANT: The "days" array MUST contain exactly 7 objects, one for each day of the week. Each day MUST total ${macros.calories} calories.
 Return valid JSON only, no markdown.`;
 
     console.log("🍽️ Generating meal plan with AI...");
@@ -324,7 +314,7 @@ Return valid JSON only, no markdown.`;
     if (!mealPlanText) {
       return NextResponse.json(
         { error: "Failed to generate meal plan" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -335,7 +325,7 @@ Return valid JSON only, no markdown.`;
       console.error("Failed to parse meal plan JSON:", e);
       return NextResponse.json(
         { error: "Invalid meal plan format" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -351,7 +341,7 @@ Return valid JSON only, no markdown.`;
     ];
     const existingDays = mealPlanData.days?.map((d: any) => d.day) || [];
     const missingDays = requiredDays.filter(
-      (day) => !existingDays.includes(day)
+      (day) => !existingDays.includes(day),
     );
 
     if (missingDays.length > 0) {
@@ -360,11 +350,9 @@ Return valid JSON only, no markdown.`;
       // Try to regenerate or return error
       return NextResponse.json(
         {
-          error: `Meal plan incomplete. Missing: ${missingDays.join(
-            ", "
-          )}. Please try again.`,
+          error: `Meal plan incomplete. Missing: ${missingDays.join(", ")}. Please try again.`,
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -409,7 +397,7 @@ Return valid JSON only, no markdown.`;
     console.error("Meal plan generation error:", error);
     return NextResponse.json(
       { error: "Failed to generate meal plan" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
