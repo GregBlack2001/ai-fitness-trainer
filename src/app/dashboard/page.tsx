@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { logEventClient } from "@/lib/events";
+import { WeeklyCheckinModal } from "@/components/weekly-checkin-modal";
 
 type WorkoutLog = {
   id: string;
@@ -56,6 +57,11 @@ export default function DashboardPage() {
   const [plan, setPlan] = useState<any>(null);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Weekly check-in state
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
+  const [weeklyAdaptations, setWeeklyAdaptations] = useState<string[]>([]);
 
   // Next week generation state
   const [showNextWeekDialog, setShowNextWeekDialog] = useState(false);
@@ -76,6 +82,7 @@ export default function DashboardPage() {
         router.push("/login");
         return;
       }
+      setUserId(user.id);
 
       // Load profile
       const { data: profileData } = await supabase
@@ -101,14 +108,55 @@ export default function DashboardPage() {
 
         try {
           const response = await fetch(
-            `/api/workout/log?userId=${user.id}&limit=20`
+            `/api/workout/log?userId=${user.id}&limit=20`,
           );
           const data = await response.json();
           if (data.logs) {
             const currentPlanLogs = data.logs.filter(
-              (log: any) => log.plan_id === planData.id
+              (log: any) => log.plan_id === planData.id,
             );
             setWorkoutLogs(currentPlanLogs);
+
+            // Check if week is complete (all workout days done)
+            const workoutDays =
+              planData.exercises?.workouts?.filter(
+                (w: any) => !w.isRestDay && w.exercises?.length > 0,
+              ) || [];
+            const completedDayIndices = new Set(
+              currentPlanLogs.map((log: any) => log.day_index),
+            );
+            const allWorkoutDaysComplete = workoutDays.every(
+              (_: any, idx: number) => {
+                // Find the actual day index in the full week
+                const fullWeekIdx = planData.exercises?.workouts?.findIndex(
+                  (w: any, i: number) =>
+                    !w.isRestDay &&
+                    w.exercises?.length > 0 &&
+                    planData.exercises.workouts
+                      .slice(0, i + 1)
+                      .filter(
+                        (ww: any) => !ww.isRestDay && ww.exercises?.length > 0,
+                      ).length ===
+                      idx + 1,
+                );
+                return completedDayIndices.has(fullWeekIdx);
+              },
+            );
+
+            // Simpler check: if completed workouts >= workout days, week is complete
+            const workoutDayCount = workoutDays.length;
+            const completedCount = currentPlanLogs.length;
+
+            if (completedCount >= workoutDayCount && workoutDayCount > 0) {
+              // Check if we already showed check-in for this plan
+              const checkinShown = localStorage.getItem(
+                `checkin_shown_${planData.id}`,
+              );
+              if (!checkinShown) {
+                setShowCheckinModal(true);
+                localStorage.setItem(`checkin_shown_${planData.id}`, "true");
+              }
+            }
           }
         } catch (error) {
           console.log("No workout logs yet");
@@ -121,6 +169,12 @@ export default function DashboardPage() {
     loadData();
   }, [supabase, router]);
 
+  const handleCheckinComplete = (adaptations: string[]) => {
+    setWeeklyAdaptations(adaptations);
+    // Reload the page to get the new plan
+    window.location.reload();
+  };
+
   const handleStartWorkout = (index: number) => {
     router.push(`/workout/${index}`);
   };
@@ -128,7 +182,7 @@ export default function DashboardPage() {
   const handlePreviewWorkout = (
     workout: any,
     index: number,
-    e: React.MouseEvent
+    e: React.MouseEvent,
   ) => {
     e.stopPropagation(); // Don't trigger the card click
     setPreviewWorkout(workout);
@@ -224,7 +278,7 @@ export default function DashboardPage() {
 
   const workouts = plan?.exercises?.workouts || [];
   const workoutDays = workouts.filter(
-    (w: any) => !w.isRestDay && w.exercises?.length > 0
+    (w: any) => !w.isRestDay && w.exercises?.length > 0,
   );
   const totalWorkouts = workoutDays.length;
   const completedWorkouts = workoutLogs.length;
@@ -235,7 +289,7 @@ export default function DashboardPage() {
   // Calculate stats
   const totalTimeSpent = workoutLogs.reduce(
     (sum, log) => sum + Math.round(log.duration_seconds / 60),
-    0
+    0,
   );
   const totalSets = workoutLogs.reduce((sum, log) => {
     const workout = workouts[log.day_index];
@@ -258,8 +312,8 @@ export default function DashboardPage() {
             {completedWorkouts === 0
               ? "Ready to start your fitness journey?"
               : completedWorkouts < totalWorkouts
-              ? "Keep up the great work!"
-              : "Amazing week! You crushed it! 🎉"}
+                ? "Keep up the great work!"
+                : "Amazing week! You crushed it! 🎉"}
           </p>
         </div>
 
@@ -300,7 +354,7 @@ export default function DashboardPage() {
                       <Target className="h-4 w-4" />
                       {nextWorkout.workout.exercises?.reduce(
                         (s: number, e: any) => s + (e.sets || 0),
-                        0
+                        0,
                       )}{" "}
                       sets
                     </span>
@@ -310,7 +364,7 @@ export default function DashboardPage() {
                         handlePreviewWorkout(
                           nextWorkout.workout,
                           nextWorkout.index,
-                          e
+                          e,
                         )
                       }
                     >
@@ -412,8 +466,8 @@ export default function DashboardPage() {
                           completed
                             ? "bg-emerald-50 dark:bg-emerald-950/30"
                             : isNext
-                            ? "bg-primary/5 ring-2 ring-primary"
-                            : "bg-white dark:bg-slate-800"
+                              ? "bg-primary/5 ring-2 ring-primary"
+                              : "bg-white dark:bg-slate-800"
                         }`}
                         onClick={() => handleStartWorkout(index)}
                       >
@@ -425,8 +479,8 @@ export default function DashboardPage() {
                                 completed
                                   ? "bg-emerald-500 text-white"
                                   : isNext
-                                  ? "bg-primary text-white"
-                                  : "bg-slate-100 dark:bg-slate-700 text-muted-foreground"
+                                    ? "bg-primary text-white"
+                                    : "bg-slate-100 dark:bg-slate-700 text-muted-foreground"
                               }`}
                             >
                               {completed ? (
@@ -761,6 +815,22 @@ export default function DashboardPage() {
           </DialogContent>
         </Dialog>
       </main>
+
+      {/* Weekly Check-in Modal */}
+      {userId && (
+        <WeeklyCheckinModal
+          open={showCheckinModal}
+          onClose={() => setShowCheckinModal(false)}
+          userId={userId}
+          completedWorkouts={workoutLogs.length}
+          totalWorkouts={
+            plan?.exercises?.workouts?.filter(
+              (w: any) => !w.isRestDay && w.exercises?.length > 0,
+            ).length || 0
+          }
+          onCheckinComplete={handleCheckinComplete}
+        />
+      )}
     </div>
   );
 }
