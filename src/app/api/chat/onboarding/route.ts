@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { validateProfileData, validateWorkoutPlan } from "@/lib/validation";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -170,38 +171,27 @@ export async function POST(request: Request) {
             equipmentData = { description: equipmentData };
           }
 
+          // Validate and sanitize the profile data
+          const { sanitized, errors } = validateProfileData({
+            ...functionArgs,
+            equipment_access: equipmentData,
+          });
+
+          if (errors.length > 0) {
+            console.warn("⚠️ Validation warnings:", errors);
+          }
+
           const updates: Record<string, any> = {
             updated_at: new Date().toISOString(),
+            ...sanitized,
           };
 
-          if (functionArgs.full_name)
-            updates.full_name = functionArgs.full_name;
-          if (functionArgs.age) updates.age = functionArgs.age;
-          if (functionArgs.gender) updates.gender = functionArgs.gender;
-          if (functionArgs.height_cm)
-            updates.height_cm = functionArgs.height_cm;
-          if (functionArgs.weight_kg)
-            updates.weight_kg = functionArgs.weight_kg;
-          if (functionArgs.fitness_goal)
-            updates.fitness_goal = functionArgs.fitness_goal;
-          if (functionArgs.fitness_level)
-            updates.fitness_level = functionArgs.fitness_level;
-          if (functionArgs.activity_level)
-            updates.activity_level = functionArgs.activity_level;
-          if (functionArgs.available_days)
-            updates.available_days = functionArgs.available_days;
-          if (equipmentData) updates.equipment_access = equipmentData;
-          if (functionArgs.injuries) updates.injuries = functionArgs.injuries;
-          if (functionArgs.dietary_restrictions)
-            updates.dietary_restrictions = functionArgs.dietary_restrictions;
-          if (functionArgs.food_allergies)
-            updates.food_allergies = functionArgs.food_allergies;
-          if (functionArgs.disliked_foods)
-            updates.disliked_foods = functionArgs.disliked_foods;
-          if (functionArgs.meals_per_day)
-            updates.meals_per_day = functionArgs.meals_per_day;
+          // Remove undefined values
+          Object.keys(updates).forEach((key) => {
+            if (updates[key] === undefined) delete updates[key];
+          });
 
-          console.log("📝 Updating profile with:", updates);
+          console.log("📝 Updating profile with validated data:", updates);
 
           const { data, error } = await supabase
             .from("profiles")
@@ -322,6 +312,15 @@ Include warmup at the start of each workout day (not rest days). Return valid JS
             });
           }
 
+          // Validate the workout plan
+          const { valid, errors, sanitized } = validateWorkoutPlan(workoutPlan);
+          if (!valid) {
+            console.warn("⚠️ Workout plan validation warnings:", errors);
+          }
+          if (sanitized) {
+            workoutPlan = sanitized;
+          }
+
           // Save workout plan
           const { error: planError } = await supabase
             .from("workout_plans")
@@ -341,7 +340,7 @@ Include warmup at the start of each workout day (not rest days). Return valid JS
             });
           }
 
-          console.log("✅ Workout plan created!");
+          console.log("✅ Workout plan created and validated!");
 
           return NextResponse.json({
             message: `🎉 Your personalized plan is ready!

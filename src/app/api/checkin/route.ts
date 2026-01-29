@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { validateCheckinData, validateWorkoutPlan } from "@/lib/validation";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -15,6 +16,13 @@ export async function POST(request: Request) {
         { error: "User ID and check-in data required" },
         { status: 400 },
       );
+    }
+
+    // Validate and sanitize check-in data
+    const { sanitized: validatedCheckin, errors: checkinErrors } =
+      validateCheckinData(checkinData);
+    if (checkinErrors.length > 0) {
+      console.warn("⚠️ Check-in validation warnings:", checkinErrors);
     }
 
     const supabase = createClient(
@@ -56,25 +64,25 @@ export async function POST(request: Request) {
       .order("created_at", { ascending: false })
       .limit(4);
 
-    // Store the check-in
+    // Store the check-in with validated data
     const { data: newCheckin, error: checkinError } = await supabase
       .from("weekly_checkins")
       .insert({
         user_id: userId,
         plan_id: currentPlan.id,
         week_number: (previousCheckins?.length || 0) + 1,
-        energy_level: checkinData.energyLevel,
-        soreness_level: checkinData.sorenessLevel,
-        workout_difficulty: checkinData.workoutDifficulty,
-        completed_workouts: checkinData.completedWorkouts,
-        total_workouts: checkinData.totalWorkouts,
-        weight_kg: checkinData.currentWeight,
-        notes: checkinData.notes,
-        goals_progress: checkinData.goalsProgress,
-        want_harder: checkinData.wantHarder,
-        want_easier: checkinData.wantEasier,
-        problem_exercises: checkinData.problemExercises,
-        favorite_exercises: checkinData.favoriteExercises,
+        energy_level: validatedCheckin.energyLevel,
+        soreness_level: validatedCheckin.sorenessLevel,
+        workout_difficulty: validatedCheckin.workoutDifficulty,
+        completed_workouts: validatedCheckin.completedWorkouts,
+        total_workouts: validatedCheckin.totalWorkouts,
+        weight_kg: validatedCheckin.currentWeight,
+        notes: validatedCheckin.notes,
+        goals_progress: validatedCheckin.goalsProgress,
+        want_harder: validatedCheckin.wantHarder,
+        want_easier: validatedCheckin.wantEasier,
+        problem_exercises: validatedCheckin.problemExercises,
+        favorite_exercises: validatedCheckin.favoriteExercises,
       })
       .select()
       .single();
@@ -192,6 +200,17 @@ Generate a new 7-day workout plan with appropriate adaptations. Return ONLY vali
         { error: "Failed to generate adapted plan" },
         { status: 500 },
       );
+    }
+
+    // Validate the new workout plan
+    const { valid, errors, sanitized } = validateWorkoutPlan({
+      workouts: newPlanData.workouts,
+    });
+    if (!valid) {
+      console.warn("⚠️ Adapted plan validation warnings:", errors);
+    }
+    if (sanitized) {
+      newPlanData.workouts = sanitized.workouts;
     }
 
     // Deactivate old plan

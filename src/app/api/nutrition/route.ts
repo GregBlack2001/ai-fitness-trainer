@@ -37,16 +37,41 @@ function calculateTDEE(bmr: number, activityLevel: string): number {
 
 // Calculate target calories based on goal
 function calculateTargetCalories(tdee: number, goal: string): number {
-  switch (goal?.toLowerCase()) {
-    case "lose weight":
-      return Math.round(tdee * 0.8); // 20% deficit
-    case "build muscle":
-      return Math.round(tdee * 1.1); // 10% surplus
-    case "increase strength":
-      return Math.round(tdee * 1.05); // 5% surplus
-    default:
-      return tdee; // Maintenance
+  const goalLower = (goal || "").toLowerCase();
+
+  // Check for weight loss keywords
+  if (
+    goalLower.includes("lose") ||
+    goalLower.includes("cut") ||
+    goalLower.includes("lean") ||
+    goalLower.includes("fat loss") ||
+    goalLower.includes("weight loss")
+  ) {
+    return Math.round(tdee * 0.8); // 20% deficit
   }
+
+  // Check for muscle building keywords
+  if (
+    goalLower.includes("muscle") ||
+    goalLower.includes("bulk") ||
+    goalLower.includes("mass") ||
+    goalLower.includes("gain") ||
+    goalLower.includes("build")
+  ) {
+    return Math.round(tdee * 1.15); // 15% surplus for muscle building
+  }
+
+  // Check for strength keywords
+  if (
+    goalLower.includes("strength") ||
+    goalLower.includes("strong") ||
+    goalLower.includes("power")
+  ) {
+    return Math.round(tdee * 1.1); // 10% surplus for strength
+  }
+
+  // Default: maintenance
+  return tdee;
 }
 
 // Calculate macros
@@ -347,7 +372,6 @@ Return valid JSON only, no markdown.`;
     if (missingDays.length > 0) {
       console.error("Missing days in meal plan:", missingDays);
       console.log("Existing days:", existingDays);
-      // Try to regenerate or return error
       return NextResponse.json(
         {
           error: `Meal plan incomplete. Missing: ${missingDays.join(", ")}. Please try again.`,
@@ -356,7 +380,79 @@ Return valid JSON only, no markdown.`;
       );
     }
 
-    console.log("✅ Meal plan generated with all 7 days");
+    // Validate and fix calorie totals for each day
+    // If AI generated wrong totals, scale the meals to match target
+    mealPlanData.days = mealPlanData.days.map((day: any) => {
+      // Calculate actual totals from meals
+      let actualCalories = 0;
+      let actualProtein = 0;
+      let actualCarbs = 0;
+      let actualFat = 0;
+
+      if (day.meals && Array.isArray(day.meals)) {
+        day.meals.forEach((meal: any) => {
+          actualCalories += meal.totalCalories || 0;
+          actualProtein += meal.totalProtein || 0;
+          actualCarbs += meal.totalCarbs || 0;
+          actualFat += meal.totalFat || 0;
+        });
+      }
+
+      // If totals are way off (more than 20% variance), scale the meals
+      if (
+        actualCalories > 0 &&
+        Math.abs(actualCalories - macros.calories) / macros.calories > 0.2
+      ) {
+        const scaleFactor = macros.calories / actualCalories;
+        console.log(
+          `📊 Day ${day.day}: Scaling meals by ${scaleFactor.toFixed(2)} (${actualCalories} -> ${macros.calories})`,
+        );
+
+        day.meals = day.meals.map((meal: any) => {
+          const scaledMeal = {
+            ...meal,
+            totalCalories: Math.round((meal.totalCalories || 0) * scaleFactor),
+            totalProtein: Math.round((meal.totalProtein || 0) * scaleFactor),
+            totalCarbs: Math.round((meal.totalCarbs || 0) * scaleFactor),
+            totalFat: Math.round((meal.totalFat || 0) * scaleFactor),
+          };
+
+          // Also scale individual foods if present
+          if (scaledMeal.foods && Array.isArray(scaledMeal.foods)) {
+            scaledMeal.foods = scaledMeal.foods.map((food: any) => ({
+              ...food,
+              calories: Math.round((food.calories || 0) * scaleFactor),
+              protein: Math.round((food.protein || 0) * scaleFactor),
+              carbs: Math.round((food.carbs || 0) * scaleFactor),
+              fat: Math.round((food.fat || 0) * scaleFactor),
+            }));
+          }
+
+          return scaledMeal;
+        });
+
+        // Update daily totals
+        actualCalories = Math.round(actualCalories * scaleFactor);
+        actualProtein = Math.round(actualProtein * scaleFactor);
+        actualCarbs = Math.round(actualCarbs * scaleFactor);
+        actualFat = Math.round(actualFat * scaleFactor);
+      }
+
+      // Set correct daily totals
+      day.dailyTotals = {
+        calories: actualCalories || macros.calories,
+        protein: actualProtein || macros.protein.grams,
+        carbs: actualCarbs || macros.carbs.grams,
+        fat: actualFat || macros.fat.grams,
+      };
+
+      return day;
+    });
+
+    console.log("✅ Meal plan generated with all 7 days, calories validated");
+    console.log(
+      `📊 Target: ${macros.calories} kcal | Goal: ${profile.fitness_goal}`,
+    );
 
     // Deactivate old meal plans
     await supabase

@@ -67,7 +67,7 @@ export function validatePassword(password: string): {
 // Validate and sanitize numeric input
 export function validateNumber(
   input: any,
-  options: { min?: number; max?: number; default?: number } = {}
+  options: { min?: number; max?: number; default?: number } = {},
 ): number | null {
   const { min = -Infinity, max = Infinity, default: defaultValue } = options;
 
@@ -90,7 +90,7 @@ export function isValidUUID(uuid: string): boolean {
 // Validate and sanitize array of strings
 export function validateStringArray(
   input: any,
-  options: { maxLength?: number; maxItems?: number } = {}
+  options: { maxLength?: number; maxItems?: number } = {},
 ): string[] {
   const { maxLength = 100, maxItems = 50 } = options;
 
@@ -225,7 +225,7 @@ export function validateProfileData(data: any): {
       sanitized.equipment_access = {
         description: sanitizeString(data.equipment_access?.description).slice(
           0,
-          500
+          500,
         ),
       };
     }
@@ -243,7 +243,7 @@ export function validateProfileData(data: any): {
   if (data.dietary_restrictions !== undefined) {
     sanitized.dietary_restrictions = validateStringArray(
       data.dietary_restrictions,
-      { maxLength: 50, maxItems: 20 }
+      { maxLength: 50, maxItems: 20 },
     );
   }
 
@@ -341,5 +341,262 @@ export function validateWorkoutLog(data: any): {
   return {
     valid: errors.length === 0,
     errors,
+  };
+}
+
+// Validate workout plan structure
+export function validateWorkoutPlan(plan: any): {
+  valid: boolean;
+  errors: string[];
+  sanitized: any;
+} {
+  const errors: string[] = [];
+  const validDays = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+
+  if (!plan || !plan.workouts || !Array.isArray(plan.workouts)) {
+    return {
+      valid: false,
+      errors: ["Invalid plan structure - missing workouts array"],
+      sanitized: null,
+    };
+  }
+
+  if (plan.workouts.length !== 7) {
+    errors.push(`Plan must have exactly 7 days, got ${plan.workouts.length}`);
+  }
+
+  const sanitizedWorkouts = plan.workouts.map((workout: any, index: number) => {
+    // Validate day name
+    if (!workout.day || !validDays.includes(workout.day)) {
+      errors.push(`Day ${index + 1}: Invalid day name "${workout.day}"`);
+      workout.day = validDays[index] || "Monday";
+    }
+
+    // Validate duration (15-120 minutes)
+    if (workout.duration_minutes !== undefined) {
+      workout.duration_minutes = Math.min(
+        Math.max(workout.duration_minutes || 45, 15),
+        120,
+      );
+    }
+
+    // Skip validation for rest days
+    if (workout.isRestDay) {
+      return { ...workout, exercises: [] };
+    }
+
+    // Validate exercises array exists and is non-empty for workout days
+    if (!workout.exercises || !Array.isArray(workout.exercises)) {
+      errors.push(`Day ${workout.day}: Missing exercises array`);
+      workout.exercises = [];
+    } else if (workout.exercises.length === 0 && !workout.isRestDay) {
+      errors.push(`Day ${workout.day}: Workout day has no exercises`);
+    }
+
+    // Validate each exercise
+    workout.exercises = workout.exercises.map(
+      (exercise: any, exIndex: number) => {
+        // Exercise name required
+        if (!exercise.name || typeof exercise.name !== "string") {
+          errors.push(
+            `Day ${workout.day}, Exercise ${exIndex + 1}: Missing exercise name`,
+          );
+          exercise.name = "Unknown Exercise";
+        }
+
+        // Sets: 1-10 range
+        exercise.sets = Math.min(Math.max(exercise.sets || 3, 1), 10);
+
+        // Reps: 1-100 range (if present)
+        if (exercise.reps !== undefined) {
+          exercise.reps = Math.min(Math.max(exercise.reps || 10, 1), 100);
+        }
+
+        // Duration seconds: 5-600 range (if present)
+        if (exercise.duration_seconds !== undefined) {
+          exercise.duration_seconds = Math.min(
+            Math.max(exercise.duration_seconds || 30, 5),
+            600,
+          );
+        }
+
+        // Rest seconds: 15-300 range
+        exercise.rest_seconds = Math.min(
+          Math.max(exercise.rest_seconds || 60, 15),
+          300,
+        );
+
+        return exercise;
+      },
+    );
+
+    return workout;
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    sanitized: { workouts: sanitizedWorkouts },
+  };
+}
+
+// Validate meal plan structure
+export function validateMealPlan(
+  plan: any,
+  targetCalories: number,
+): {
+  valid: boolean;
+  errors: string[];
+  sanitized: any;
+} {
+  const errors: string[] = [];
+  const validDays = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+
+  if (!plan || !plan.days || !Array.isArray(plan.days)) {
+    return {
+      valid: false,
+      errors: ["Invalid meal plan structure - missing days array"],
+      sanitized: null,
+    };
+  }
+
+  if (plan.days.length !== 7) {
+    errors.push(`Meal plan must have exactly 7 days, got ${plan.days.length}`);
+  }
+
+  const sanitizedDays = plan.days.map((day: any, index: number) => {
+    // Validate day name
+    if (!day.day || !validDays.includes(day.day)) {
+      errors.push(`Day ${index + 1}: Invalid day name "${day.day}"`);
+      day.day = validDays[index] || "Monday";
+    }
+
+    // Validate meals array
+    if (!day.meals || !Array.isArray(day.meals) || day.meals.length === 0) {
+      errors.push(`Day ${day.day}: Missing or empty meals array`);
+      day.meals = [];
+    }
+
+    // Validate each meal
+    day.meals = day.meals.map((meal: any) => {
+      // Ensure non-negative values
+      meal.totalCalories = Math.max(meal.totalCalories || 0, 0);
+      meal.totalProtein = Math.max(meal.totalProtein || 0, 0);
+      meal.totalCarbs = Math.max(meal.totalCarbs || 0, 0);
+      meal.totalFat = Math.max(meal.totalFat || 0, 0);
+
+      // Validate foods array
+      if (meal.foods && Array.isArray(meal.foods)) {
+        meal.foods = meal.foods.map((food: any) => ({
+          ...food,
+          calories: Math.max(food.calories || 0, 0),
+          protein: Math.max(food.protein || 0, 0),
+          carbs: Math.max(food.carbs || 0, 0),
+          fat: Math.max(food.fat || 0, 0),
+        }));
+      }
+
+      return meal;
+    });
+
+    // Validate daily totals
+    if (day.dailyTotals) {
+      day.dailyTotals.calories = Math.max(day.dailyTotals.calories || 0, 0);
+      day.dailyTotals.protein = Math.max(day.dailyTotals.protein || 0, 0);
+      day.dailyTotals.carbs = Math.max(day.dailyTotals.carbs || 0, 0);
+      day.dailyTotals.fat = Math.max(day.dailyTotals.fat || 0, 0);
+
+      // Check if calories are within 15% of target
+      const calorieVariance =
+        Math.abs(day.dailyTotals.calories - targetCalories) / targetCalories;
+      if (calorieVariance > 0.15) {
+        errors.push(
+          `Day ${day.day}: Calories ${day.dailyTotals.calories} are more than 15% off target ${targetCalories}`,
+        );
+      }
+    }
+
+    return day;
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    sanitized: { days: sanitizedDays },
+  };
+}
+
+// Validate weekly check-in data
+export function validateCheckinData(data: any): {
+  valid: boolean;
+  errors: string[];
+  sanitized: any;
+} {
+  const errors: string[] = [];
+  const sanitized: any = {};
+
+  // Energy level: 1-5
+  sanitized.energyLevel = Math.min(Math.max(data.energyLevel || 3, 1), 5);
+
+  // Soreness level: 1-5
+  sanitized.sorenessLevel = Math.min(Math.max(data.sorenessLevel || 3, 1), 5);
+
+  // Workout difficulty: 1-5
+  sanitized.workoutDifficulty = Math.min(
+    Math.max(data.workoutDifficulty || 3, 1),
+    5,
+  );
+
+  // Completed workouts: 0-20
+  sanitized.completedWorkouts = Math.min(
+    Math.max(data.completedWorkouts || 0, 0),
+    20,
+  );
+
+  // Total workouts: 1-20
+  sanitized.totalWorkouts = Math.min(Math.max(data.totalWorkouts || 1, 1), 20);
+
+  // Current weight: 20-500 kg (optional)
+  if (data.currentWeight !== undefined && data.currentWeight !== null) {
+    sanitized.currentWeight = Math.min(Math.max(data.currentWeight, 20), 500);
+  }
+
+  // Boolean flags
+  sanitized.wantHarder = Boolean(data.wantHarder);
+  sanitized.wantEasier = Boolean(data.wantEasier);
+
+  // Text fields (sanitize and limit length)
+  sanitized.notes = sanitizeString(data.notes || "").slice(0, 1000);
+  sanitized.goalsProgress = sanitizeString(data.goalsProgress || "").slice(
+    0,
+    1000,
+  );
+  sanitized.problemExercises = sanitizeString(
+    data.problemExercises || "",
+  ).slice(0, 500);
+  sanitized.favoriteExercises = sanitizeString(
+    data.favoriteExercises || "",
+  ).slice(0, 500);
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    sanitized,
   };
 }
