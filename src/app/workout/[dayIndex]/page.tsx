@@ -124,7 +124,7 @@ export default function WorkoutSessionPage() {
           exerciseIndex: i,
           completedSets: [],
           skipped: false,
-        })
+        }),
       );
       setExerciseLogs(logs);
       setLoading(false);
@@ -172,8 +172,9 @@ export default function WorkoutSessionPage() {
     (type: "complete" | "rest" | "finish") => {
       if (!soundEnabled) return;
       // Using Web Audio API for simple beeps
-      const audioContext = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
+      const audioContext = new (
+        window.AudioContext || (window as any).webkitAudioContext
+      )();
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
 
@@ -202,7 +203,7 @@ export default function WorkoutSessionPage() {
         }, 200);
       }
     },
-    [soundEnabled]
+    [soundEnabled],
   );
 
   const handleTimerComplete = useCallback(() => {
@@ -314,14 +315,14 @@ export default function WorkoutSessionPage() {
     setSaving(true);
     try {
       const completedExercises = exerciseLogs.filter(
-        (log) => !log.skipped && log.completedSets.length > 0
+        (log) => !log.skipped && log.completedSets.length > 0,
       ).length;
       const totalSetsCompleted = exerciseLogs.reduce(
         (sum, log) => sum + log.completedSets.length,
-        0
+        0,
       );
       const completionPercentage = Math.round(
-        (completedExercises / workout.exercises.length) * 100
+        (completedExercises / workout.exercises.length) * 100,
       );
 
       await fetch("/api/workout/log", {
@@ -364,6 +365,22 @@ export default function WorkoutSessionPage() {
 
   const exitWorkout = () => {
     if (elapsedRef.current) clearInterval(elapsedRef.current);
+    router.push("/dashboard");
+  };
+
+  const skipWorkout = async () => {
+    if (!userId || !planId || !workout) return;
+
+    // Log the skip event
+    logEventClient("workout_skipped", {
+      day_index: dayIndex,
+      workout_day: workout.day,
+      workout_focus: workout.focus,
+      total_exercises: workout.exercises.length,
+      reason: "user_skipped",
+    });
+
+    // Navigate back to dashboard
     router.push("/dashboard");
   };
 
@@ -512,8 +529,8 @@ export default function WorkoutSessionPage() {
                         ]?.completedSets.includes(i + 1)
                           ? "bg-green-500 text-white"
                           : i + 1 === currentSet
-                          ? "bg-primary text-primary-foreground ring-4 ring-primary/30"
-                          : "bg-muted text-muted-foreground"
+                            ? "bg-primary text-primary-foreground ring-4 ring-primary/30"
+                            : "bg-muted text-muted-foreground"
                       }`}
                     >
                       {exerciseLogs[
@@ -597,10 +614,7 @@ export default function WorkoutSessionPage() {
               <p className="text-muted-foreground">
                 {currentSet < currentExercise.sets
                   ? `Get ready for set ${currentSet + 1}`
-                  : `Get ready for ${
-                      workout.exercises[currentExerciseIndex + 1]?.name ||
-                      "the next exercise"
-                    }`}
+                  : `Get ready for ${workout.exercises[currentExerciseIndex + 1]?.name || "the next exercise"}`}
               </p>
             </CardHeader>
             <CardContent className="text-center space-y-6">
@@ -610,8 +624,8 @@ export default function WorkoutSessionPage() {
                   timeRemaining <= 5
                     ? "text-red-500"
                     : timeRemaining <= 10
-                    ? "text-yellow-500"
-                    : ""
+                      ? "text-yellow-500"
+                      : ""
                 }`}
               >
                 {formatTime(timeRemaining)}
@@ -687,13 +701,24 @@ export default function WorkoutSessionPage() {
               </Card>
             )}
 
-            <div className="flex gap-3 justify-center pt-4">
-              <Button size="lg" variant="outline" onClick={skipWarmup}>
-                Skip Warmup
-              </Button>
-              <Button size="lg" onClick={startWarmup}>
-                <Play className="mr-2 h-5 w-5" />
-                Start Warmup
+            <div className="flex flex-col gap-3 items-center pt-4">
+              <div className="flex gap-3">
+                <Button size="lg" variant="outline" onClick={skipWarmup}>
+                  Skip Warmup
+                </Button>
+                <Button size="lg" onClick={startWarmup}>
+                  <Play className="mr-2 h-5 w-5" />
+                  Start Warmup
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={skipWorkout}
+              >
+                <SkipForward className="mr-2 h-4 w-4" />
+                Skip Today's Workout
               </Button>
             </div>
           </div>
@@ -744,7 +769,7 @@ export default function WorkoutSessionPage() {
               <div className="text-2xl font-bold">
                 {
                   exerciseLogs.filter(
-                    (l) => !l.skipped && l.completedSets.length > 0
+                    (l) => !l.skipped && l.completedSets.length > 0,
                   ).length
                 }
               </div>
@@ -754,7 +779,7 @@ export default function WorkoutSessionPage() {
               <div className="text-2xl font-bold">
                 {exerciseLogs.reduce(
                   (sum, l) => sum + l.completedSets.length,
-                  0
+                  0,
                 )}
               </div>
               <div className="text-xs text-muted-foreground">Sets</div>

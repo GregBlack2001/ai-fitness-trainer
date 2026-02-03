@@ -9,6 +9,7 @@ export type EventType =
   | "plan_viewed"
   | "workout_started"
   | "workout_completed"
+  | "workout_skipped"
   | "exercise_logged"
   | "checkin_submitted"
   | "plan_updated"
@@ -31,12 +32,12 @@ export interface EventMetadata {
 export async function logEvent(
   userId: string,
   eventType: EventType,
-  metadata: EventMetadata = {}
+  metadata: EventMetadata = {},
 ): Promise<boolean> {
   try {
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     const { error } = await supabase.from("events").insert({
@@ -52,7 +53,7 @@ export async function logEvent(
     }
 
     console.log(
-      `📊 Event logged: ${eventType} for user ${userId.slice(0, 8)}...`
+      `📊 Event logged: ${eventType} for user ${userId.slice(0, 8)}...`,
     );
     return true;
   } catch (err) {
@@ -66,7 +67,7 @@ export async function logEvent(
  */
 export async function logEventClient(
   eventType: EventType,
-  metadata: EventMetadata = {}
+  metadata: EventMetadata = {},
 ): Promise<boolean> {
   try {
     const response = await fetch("/api/events", {
