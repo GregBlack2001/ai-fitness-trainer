@@ -14,12 +14,13 @@ export async function POST(request: Request) {
       total_exercises,
       sets_completed,
       exercise_logs,
+      status = "completed", // "completed" or "skipped"
     } = body;
 
     if (!userId || !planId) {
       return NextResponse.json(
         { error: "User ID and Plan ID are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -27,25 +28,27 @@ export async function POST(request: Request) {
     console.log("User ID:", userId);
     console.log("Plan ID:", planId);
     console.log("Day Index:", dayIndex);
+    console.log("Status:", status);
     console.log("Duration:", duration_seconds, "seconds");
     console.log(
       "Exercises completed:",
       exercises_completed,
       "/",
-      total_exercises
+      total_exercises,
     );
     console.log("Total sets:", sets_completed);
 
     // Create Supabase admin client
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     // Calculate completion percentage
-    const completion_percentage = Math.round(
-      (exercises_completed / total_exercises) * 100
-    );
+    const completion_percentage =
+      status === "skipped"
+        ? 0
+        : Math.round((exercises_completed / total_exercises) * 100);
 
     // Save workout log
     const { data: workoutLog, error: logError } = await supabaseAdmin
@@ -57,12 +60,13 @@ export async function POST(request: Request) {
           day_index: dayIndex,
           workout_day: workout.day,
           workout_focus: workout.focus,
-          duration_seconds,
-          exercises_completed,
-          total_exercises,
-          sets_completed,
+          duration_seconds: duration_seconds || 0,
+          exercises_completed: exercises_completed || 0,
+          total_exercises: total_exercises || 0,
+          sets_completed: sets_completed || 0,
           completion_percentage,
-          exercise_details: exercise_logs,
+          exercise_details: exercise_logs || [],
+          status,
           completed_at: new Date().toISOString(),
         },
       ])
@@ -112,13 +116,13 @@ CREATE INDEX idx_workout_logs_user_id ON workout_logs(user_id);
 CREATE INDEX idx_workout_logs_completed_at ON workout_logs(completed_at);
             `,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
       return NextResponse.json(
         { error: "Failed to save workout log" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -135,7 +139,7 @@ CREATE INDEX idx_workout_logs_completed_at ON workout_logs(completed_at);
     console.error("❌ Workout log error:", error);
     return NextResponse.json(
       { error: "Failed to log workout" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -150,13 +154,13 @@ export async function GET(request: Request) {
     if (!userId) {
       return NextResponse.json(
         { error: "User ID is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     const { data: logs, error } = await supabaseAdmin
@@ -170,7 +174,7 @@ export async function GET(request: Request) {
       console.error("Failed to fetch workout logs:", error);
       return NextResponse.json(
         { error: "Failed to fetch workout logs" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -178,14 +182,14 @@ export async function GET(request: Request) {
     const totalWorkouts = logs.length;
     const totalMinutes = logs.reduce(
       (sum, log) => sum + Math.round(log.duration_seconds / 60),
-      0
+      0,
     );
     const totalSets = logs.reduce((sum, log) => sum + log.sets_completed, 0);
     const avgCompletion =
       logs.length > 0
         ? Math.round(
             logs.reduce((sum, log) => sum + log.completion_percentage, 0) /
-              logs.length
+              logs.length,
           )
         : 0;
 
@@ -202,7 +206,7 @@ export async function GET(request: Request) {
     console.error("Workout logs fetch error:", error);
     return NextResponse.json(
       { error: "Failed to fetch workout logs" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

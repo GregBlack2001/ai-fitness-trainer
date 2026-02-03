@@ -35,6 +35,7 @@ import {
   Zap,
   Eye,
   X,
+  SkipForward,
 } from "lucide-react";
 import Link from "next/link";
 import { logEventClient } from "@/lib/events";
@@ -48,6 +49,7 @@ type WorkoutLog = {
   duration_seconds: number;
   completion_percentage: number;
   completed_at: string;
+  status?: "completed" | "skipped";
 };
 
 export default function DashboardPage() {
@@ -117,37 +119,38 @@ export default function DashboardPage() {
             );
             setWorkoutLogs(currentPlanLogs);
 
-            // Check if week is complete (all workout days done)
+            // Check if week is complete (all workout days done or skipped)
             const workoutDays =
               planData.exercises?.workouts?.filter(
                 (w: any) => !w.isRestDay && w.exercises?.length > 0,
               ) || [];
-            const completedDayIndices = new Set(
+
+            // Count unique day indices that have been completed or skipped
+            const handledDayIndices = new Set(
               currentPlanLogs.map((log: any) => log.day_index),
             );
-            const allWorkoutDaysComplete = workoutDays.every(
-              (_: any, idx: number) => {
-                // Find the actual day index in the full week
-                const fullWeekIdx = planData.exercises?.workouts?.findIndex(
-                  (w: any, i: number) =>
-                    !w.isRestDay &&
-                    w.exercises?.length > 0 &&
-                    planData.exercises.workouts
-                      .slice(0, i + 1)
-                      .filter(
-                        (ww: any) => !ww.isRestDay && ww.exercises?.length > 0,
-                      ).length ===
-                      idx + 1,
-                );
-                return completedDayIndices.has(fullWeekIdx);
-              },
+
+            // Get the actual day indices for workout days (not rest days)
+            const workoutDayIndices =
+              planData.exercises?.workouts
+                ?.map((w: any, idx: number) => ({ ...w, idx }))
+                .filter((w: any) => !w.isRestDay && w.exercises?.length > 0)
+                .map((w: any) => w.idx) || [];
+
+            // Check if all workout days have been handled (completed or skipped)
+            const allWorkoutDaysHandled = workoutDayIndices.every(
+              (idx: number) => handledDayIndices.has(idx),
             );
 
-            // Simpler check: if completed workouts >= workout days, week is complete
             const workoutDayCount = workoutDays.length;
-            const completedCount = currentPlanLogs.length;
+            const completedCount = currentPlanLogs.filter(
+              (log: any) => log.status !== "skipped",
+            ).length;
+            const skippedCount = currentPlanLogs.filter(
+              (log: any) => log.status === "skipped",
+            ).length;
 
-            if (completedCount >= workoutDayCount && workoutDayCount > 0) {
+            if (allWorkoutDaysHandled && workoutDayCount > 0) {
               // Check if we already showed check-in for this plan
               const checkinShown = localStorage.getItem(
                 `checkin_shown_${planData.id}`,
@@ -195,6 +198,18 @@ export default function DashboardPage() {
   };
 
   const isWorkoutCompleted = (dayIndex: number) => {
+    return workoutLogs.some(
+      (log) => log.day_index === dayIndex && log.status !== "skipped",
+    );
+  };
+
+  const isWorkoutSkipped = (dayIndex: number) => {
+    return workoutLogs.some(
+      (log) => log.day_index === dayIndex && log.status === "skipped",
+    );
+  };
+
+  const isWorkoutHandled = (dayIndex: number) => {
     return workoutLogs.some((log) => log.day_index === dayIndex);
   };
 
@@ -202,14 +217,14 @@ export default function DashboardPage() {
     return workoutLogs.find((log) => log.day_index === dayIndex);
   };
 
-  // Find next workout to do (skip rest days)
+  // Find next workout to do (skip rest days and handled workouts)
   const getNextWorkout = () => {
     if (!plan?.exercises?.workouts) return null;
     const workouts = plan.exercises.workouts;
     for (let i = 0; i < workouts.length; i++) {
       const isRestDay =
         workouts[i].isRestDay || workouts[i].exercises?.length === 0;
-      if (!isRestDay && !isWorkoutCompleted(i)) {
+      if (!isRestDay && !isWorkoutHandled(i)) {
         return { workout: workouts[i], index: i };
       }
     }
@@ -423,6 +438,7 @@ export default function DashboardPage() {
                     const isRestDay =
                       workout.isRestDay || workout.exercises?.length === 0;
                     const completed = !isRestDay && isWorkoutCompleted(index);
+                    const skipped = !isRestDay && isWorkoutSkipped(index);
                     const log = getWorkoutLog(index);
                     const isNext = nextWorkout?.index === index && !isRestDay;
 
@@ -465,9 +481,11 @@ export default function DashboardPage() {
                         className={`border-0 shadow-md transition-all cursor-pointer hover:shadow-lg ${
                           completed
                             ? "bg-emerald-50 dark:bg-emerald-950/30"
-                            : isNext
-                              ? "bg-primary/5 ring-2 ring-primary"
-                              : "bg-white dark:bg-slate-800"
+                            : skipped
+                              ? "bg-amber-50 dark:bg-amber-950/30"
+                              : isNext
+                                ? "bg-primary/5 ring-2 ring-primary"
+                                : "bg-white dark:bg-slate-800"
                         }`}
                         onClick={() => handleStartWorkout(index)}
                       >
@@ -478,13 +496,17 @@ export default function DashboardPage() {
                               className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                                 completed
                                   ? "bg-emerald-500 text-white"
-                                  : isNext
-                                    ? "bg-primary text-white"
-                                    : "bg-slate-100 dark:bg-slate-700 text-muted-foreground"
+                                  : skipped
+                                    ? "bg-amber-500 text-white"
+                                    : isNext
+                                      ? "bg-primary text-white"
+                                      : "bg-slate-100 dark:bg-slate-700 text-muted-foreground"
                               }`}
                             >
                               {completed ? (
                                 <CheckCircle2 className="h-6 w-6" />
+                              ) : skipped ? (
+                                <SkipForward className="h-6 w-6" />
                               ) : (
                                 <Dumbbell className="h-5 w-5" />
                               )}
@@ -494,9 +516,17 @@ export default function DashboardPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <h3 className="font-semibold">{workout.day}</h3>
-                                {isNext && !completed && (
+                                {isNext && !completed && !skipped && (
                                   <Badge className="bg-primary text-white text-xs">
                                     Next
+                                  </Badge>
+                                )}
+                                {skipped && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-amber-600 border-amber-600 text-xs"
+                                  >
+                                    Skipped
                                   </Badge>
                                 )}
                               </div>
@@ -507,6 +537,11 @@ export default function DashboardPage() {
                                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
                                   Completed in{" "}
                                   {Math.round(log.duration_seconds / 60)} min
+                                </p>
+                              )}
+                              {skipped && (
+                                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                  Skipped this week
                                 </p>
                               )}
                             </div>
@@ -822,7 +857,12 @@ export default function DashboardPage() {
           open={showCheckinModal}
           onClose={() => setShowCheckinModal(false)}
           userId={userId}
-          completedWorkouts={workoutLogs.length}
+          completedWorkouts={
+            workoutLogs.filter((log) => log.status !== "skipped").length
+          }
+          skippedWorkouts={
+            workoutLogs.filter((log) => log.status === "skipped").length
+          }
           totalWorkouts={
             plan?.exercises?.workouts?.filter(
               (w: any) => !w.isRestDay && w.exercises?.length > 0,

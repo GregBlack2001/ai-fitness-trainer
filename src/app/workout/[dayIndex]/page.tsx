@@ -371,17 +371,44 @@ export default function WorkoutSessionPage() {
   const skipWorkout = async () => {
     if (!userId || !planId || !workout) return;
 
-    // Log the skip event
-    logEventClient("workout_skipped", {
-      day_index: dayIndex,
-      workout_day: workout.day,
-      workout_focus: workout.focus,
-      total_exercises: workout.exercises.length,
-      reason: "user_skipped",
-    });
+    setSaving(true);
 
-    // Navigate back to dashboard
-    router.push("/dashboard");
+    try {
+      // Save skipped workout log
+      await fetch("/api/workout/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          planId,
+          dayIndex,
+          workout: {
+            day: workout.day,
+            focus: workout.focus,
+          },
+          duration_seconds: 0,
+          exercises_completed: 0,
+          total_exercises: workout.exercises.length,
+          sets_completed: 0,
+          exercise_logs: [],
+          status: "skipped",
+        }),
+      });
+
+      // Log the skip event
+      logEventClient("workout_skipped", {
+        day_index: dayIndex,
+        workout_day: workout.day,
+        workout_focus: workout.focus,
+        total_exercises: workout.exercises.length,
+        reason: "user_skipped",
+      });
+    } catch (error) {
+      console.error("Failed to save skipped workout:", error);
+    } finally {
+      setSaving(false);
+      router.push("/dashboard");
+    }
   };
 
   if (loading) {

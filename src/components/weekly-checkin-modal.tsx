@@ -30,6 +30,7 @@ type CheckinData = {
   sorenessLevel: number;
   workoutDifficulty: number;
   completedWorkouts: number;
+  skippedWorkouts: number;
   totalWorkouts: number;
   currentWeight?: number;
   notes: string;
@@ -45,6 +46,7 @@ type Props = {
   onClose: () => void;
   userId: string;
   completedWorkouts: number;
+  skippedWorkouts?: number;
   totalWorkouts: number;
   onCheckinComplete: (adaptations: string[]) => void;
 };
@@ -78,6 +80,7 @@ export function WeeklyCheckinModal({
   onClose,
   userId,
   completedWorkouts,
+  skippedWorkouts = 0,
   totalWorkouts,
   onCheckinComplete,
 }: Props) {
@@ -91,6 +94,7 @@ export function WeeklyCheckinModal({
     sorenessLevel: 3,
     workoutDifficulty: 3,
     completedWorkouts,
+    skippedWorkouts,
     totalWorkouts,
     notes: "",
     goalsProgress: "",
@@ -414,8 +418,10 @@ export function WeeklyCheckinModal({
               <div className="bg-muted/50 rounded-lg p-3">
                 <p className="text-sm text-muted-foreground">
                   <strong>This week:</strong> You completed {completedWorkouts}{" "}
-                  of {totalWorkouts} workouts (
-                  {Math.round((completedWorkouts / totalWorkouts) * 100)}%)
+                  of {totalWorkouts} workouts
+                  {skippedWorkouts > 0 && ` (${skippedWorkouts} skipped)`} (
+                  {Math.round((completedWorkouts / totalWorkouts) * 100)}%
+                  completion rate)
                 </p>
               </div>
             </div>
