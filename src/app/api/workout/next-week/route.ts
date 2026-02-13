@@ -375,17 +375,13 @@ Return valid JSON only.`;
 // GET endpoint to check if week is complete and eligible for next week
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId || !isValidUUID(userId)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
+    const { supabase, user } = auth;
+    const userId = user.id;
 
     // Get current plan
     const { data: currentPlan } = await supabase
@@ -415,8 +411,10 @@ export async function GET(request: Request) {
 
     // Calculate stats
     const avgCompletion = workoutLogs?.length
-      ? workoutLogs.reduce((sum, log) => sum + log.completion_percentage, 0) /
-        workoutLogs.length
+      ? workoutLogs.reduce(
+          (sum: number, log: any) => sum + log.completion_percentage,
+          0,
+        ) / workoutLogs.length
       : 0;
 
     return NextResponse.json({
