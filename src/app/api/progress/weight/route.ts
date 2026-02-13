@@ -1,21 +1,22 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { getAuthenticatedClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
-    const { userId, weight_kg } = await request.json();
+    const { weight_kg } = await request.json();
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 }
-      );
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const { supabase, user } = auth;
+    const userId = user.id;
 
     if (!weight_kg || weight_kg <= 0) {
       return NextResponse.json(
         { error: "Valid weight is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -23,13 +24,8 @@ export async function POST(request: Request) {
     console.log("User ID:", userId);
     console.log("Weight:", weight_kg, "kg");
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    // Insert weight entry
-    const { data: entry, error } = await supabaseAdmin
+    // Insert weight entry (RLS enforces user_id = auth.uid())
+    const { data: entry, error } = await supabase
       .from("weight_logs")
       .insert([
         {
@@ -77,20 +73,20 @@ CREATE INDEX idx_weight_logs_user_id ON weight_logs(user_id);
 CREATE INDEX idx_weight_logs_recorded_at ON weight_logs(recorded_at DESC);
             `,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
       return NextResponse.json(
         { error: "Failed to save weight" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     console.log("✅ Weight logged:", entry.id);
 
     // Also update profile with latest weight
-    await supabaseAdmin.from("profiles").update({ weight_kg }).eq("id", userId);
+    await supabase.from("profiles").update({ weight_kg }).eq("id", userId);
 
     return NextResponse.json({
       success: true,
@@ -100,29 +96,23 @@ CREATE INDEX idx_weight_logs_recorded_at ON weight_logs(recorded_at DESC);
     console.error("❌ Weight log error:", error);
     return NextResponse.json(
       { error: "Failed to log weight" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 }
-      );
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const { supabase, user } = auth;
+    const userId = user.id;
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
-    const { data: entries, error } = await supabaseAdmin
+    // Fetch weight logs (RLS enforces user_id = auth.uid())
+    const { data: entries, error } = await supabase
       .from("weight_logs")
       .select("*")
       .eq("user_id", userId)
@@ -132,7 +122,7 @@ export async function GET(request: Request) {
       console.error("Failed to fetch weight logs:", error);
       return NextResponse.json(
         { error: "Failed to fetch weight logs" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -141,7 +131,7 @@ export async function GET(request: Request) {
     console.error("Weight fetch error:", error);
     return NextResponse.json(
       { error: "Failed to fetch weight logs" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -150,30 +140,32 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const entryId = searchParams.get("id");
-    const userId = searchParams.get("userId");
 
-    if (!entryId || !userId) {
+    if (!entryId) {
       return NextResponse.json(
-        { error: "Entry ID and User ID are required" },
-        { status: 400 }
+        { error: "Entry ID is required" },
+        { status: 400 },
       );
     }
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const { supabase, user } = auth;
 
-    const { error } = await supabaseAdmin
+    // Delete entry (RLS enforces user_id = auth.uid())
+    const { error } = await supabase
       .from("weight_logs")
       .delete()
       .eq("id", entryId)
-      .eq("user_id", userId);
+      .eq("user_id", user.id);
 
     if (error) {
       return NextResponse.json(
         { error: "Failed to delete entry" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -182,7 +174,7 @@ export async function DELETE(request: Request) {
     console.error("Weight delete error:", error);
     return NextResponse.json(
       { error: "Failed to delete weight entry" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

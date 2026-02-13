@@ -216,7 +216,6 @@ export default function SettingsPage() {
       const response = await fetch("/api/account/delete", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
       });
 
       if (response.ok) {

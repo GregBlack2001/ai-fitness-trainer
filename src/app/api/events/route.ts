@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { getAuthenticatedClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
@@ -10,43 +8,18 @@ export async function POST(request: Request) {
     if (!eventType) {
       return NextResponse.json(
         { error: "Event type required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Get the current user from session
-    const cookieStore = await cookies();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options);
-            });
-          },
-        },
-      }
-    );
-
-    const {
-      data: { user },
-    } = await supabaseAuth.auth.getUser();
-
-    if (!user) {
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const { supabase, user } = auth;
 
-    // Use service role to insert event (bypasses RLS)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
+    // Insert event (RLS enforces user_id = auth.uid())
     const { error } = await supabase.from("events").insert({
       user_id: user.id,
       event_type: eventType,
@@ -58,12 +31,12 @@ export async function POST(request: Request) {
       console.error("Failed to log event:", error);
       return NextResponse.json(
         { error: "Failed to log event" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     console.log(
-      `📊 Event logged: ${eventType} for user ${user.id.slice(0, 8)}...`
+      `📊 Event logged: ${eventType} for user ${user.id.slice(0, 8)}...`,
     );
 
     return NextResponse.json({ success: true });
@@ -71,30 +44,26 @@ export async function POST(request: Request) {
     console.error("Event API error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
-// GET endpoint to retrieve events for a user (for admin/analysis)
+// GET endpoint to retrieve events for the authenticated user
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 });
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const { supabase, user } = auth;
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-
+    // Fetch events (RLS enforces user_id = auth.uid())
     const { data, error } = await supabase
       .from("events")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -106,7 +75,7 @@ export async function GET(request: Request) {
     console.error("Event GET error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

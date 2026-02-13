@@ -1,12 +1,11 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedClient } from "@/lib/supabase/server";
 import {
   checkRateLimit,
   getClientIp,
   rateLimitResponse,
 } from "@/lib/rate-limit";
-import { isValidUUID } from "@/lib/validation";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -22,22 +21,21 @@ export async function POST(request: Request) {
       return rateLimitResponse(rateLimitResult);
     }
 
-    const { userId, feedback } = await request.json();
+    const { feedback } = await request.json();
 
-    if (!userId || !isValidUUID(userId)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const { supabase, user } = auth;
+    const userId = user.id;
 
     console.log("=== GENERATING NEXT WEEK ===");
     console.log("User ID:", userId);
     console.log("Feedback:", feedback);
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
-    // Get user profile
+    // Get user profile (RLS enforces user_id = auth.uid())
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")

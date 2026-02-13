@@ -147,13 +147,13 @@ What can I help you with today?`,
 
           if (event.error === "not-allowed") {
             alert(
-              "Microphone access denied. Please allow microphone access in your browser settings and refresh the page."
+              "Microphone access denied. Please allow microphone access in your browser settings and refresh the page.",
             );
           } else if (event.error === "no-speech") {
             // User didn't say anything, this is okay
           } else if (event.error === "network") {
             alert(
-              "Network error. Speech recognition requires an internet connection."
+              "Network error. Speech recognition requires an internet connection.",
             );
           }
         };
@@ -234,11 +234,11 @@ What can I help you with today?`,
           err.name === "PermissionDeniedError"
         ) {
           alert(
-            "Microphone access is required for voice input. Please allow microphone access in your browser settings and try again."
+            "Microphone access is required for voice input. Please allow microphone access in your browser settings and try again.",
           );
         } else if (err.name === "NotFoundError") {
           alert(
-            "No microphone found. Please connect a microphone and try again."
+            "No microphone found. Please connect a microphone and try again.",
           );
         } else {
           alert("Could not access microphone: " + err.message);
@@ -276,7 +276,7 @@ What can I help you with today?`,
         v.name.includes("Google") ||
         v.name.includes("Natural") ||
         v.name.includes("Samantha") ||
-        v.lang.startsWith("en")
+        v.lang.startsWith("en"),
     );
     if (preferredVoice) {
       utterance.voice = preferredVoice;
@@ -324,7 +324,6 @@ What can I help you with today?`,
             role: m.role,
             content: m.content,
           })),
-          userId,
         }),
       });
 
@@ -600,11 +599,7 @@ What can I help you with today?`,
                   isListening ? "Listening..." : "Ask your coach anything..."
                 }
                 disabled={isLoading}
-                className={`flex-1 h-12 text-base ${
-                  isListening
-                    ? "border-red-500 bg-red-50 dark:bg-red-950/20"
-                    : ""
-                }`}
+                className={`flex-1 h-12 text-base ${isListening ? "border-red-500 bg-red-50 dark:bg-red-950/20" : ""}`}
               />
               <Button
                 onClick={() => handleSend()}

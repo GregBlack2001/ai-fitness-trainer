@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedClient } from "@/lib/supabase/server";
 import {
   checkRateLimit,
   getClientIp,
@@ -860,12 +861,15 @@ export async function POST(request: Request) {
       return rateLimitResponse(rateLimitResult);
     }
 
-    const { messages, userId } = await request.json();
+    const { messages } = await request.json();
 
-    // Validate user ID
-    if (!userId || !isValidUUID(userId)) {
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const { supabase, user } = auth;
+    const userId = user.id;
 
     // Validate last message
     const lastMessage = messages?.[messages.length - 1]?.content;
@@ -882,12 +886,7 @@ export async function POST(request: Request) {
     console.log("=== COACH CHAT REQUEST ===");
     console.log("User ID:", userId);
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
-    // Fetch user data
+    // Fetch user data (RLS enforces user_id = auth.uid())
     const { data: profile } = await supabase
       .from("profiles")
       .select("*")

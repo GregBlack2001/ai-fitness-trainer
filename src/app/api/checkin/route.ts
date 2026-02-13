@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { getAuthenticatedClient } from "@/lib/supabase/server";
 import { validateCheckinData, validateWorkoutPlan } from "@/lib/validation";
 
 const openai = new OpenAI({
@@ -9,11 +9,19 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    const { userId, checkinData } = await request.json();
+    const { checkinData } = await request.json();
 
-    if (!userId || !checkinData) {
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const { supabase, user } = auth;
+    const userId = user.id;
+
+    if (!checkinData) {
       return NextResponse.json(
-        { error: "User ID and check-in data required" },
+        { error: "Check-in data required" },
         { status: 400 },
       );
     }
@@ -25,12 +33,7 @@ export async function POST(request: Request) {
       console.warn("⚠️ Check-in validation warnings:", checkinErrors);
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
-    // Get user profile
+    // Get user profile (RLS enforces user_id = auth.uid())
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")

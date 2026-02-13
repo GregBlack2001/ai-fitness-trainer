@@ -1,11 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { getAuthenticatedClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const {
-      userId,
       planId,
       dayIndex,
       workout,
@@ -17,9 +16,17 @@ export async function POST(request: Request) {
       status = "completed", // "completed" or "skipped"
     } = body;
 
-    if (!userId || !planId) {
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    const { supabase, user } = auth;
+    const userId = user.id;
+
+    if (!planId) {
       return NextResponse.json(
-        { error: "User ID and Plan ID are required" },
+        { error: "Plan ID is required" },
         { status: 400 },
       );
     }
@@ -38,20 +45,14 @@ export async function POST(request: Request) {
     );
     console.log("Total sets:", sets_completed);
 
-    // Create Supabase admin client
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
     // Calculate completion percentage
     const completion_percentage =
       status === "skipped"
         ? 0
         : Math.round((exercises_completed / total_exercises) * 100);
 
-    // Save workout log
-    const { data: workoutLog, error: logError } = await supabaseAdmin
+    // Save workout log (RLS enforces user_id = auth.uid())
+    const { data: workoutLog, error: logError } = await supabase
       .from("workout_logs")
       .insert([
         {
@@ -148,22 +149,18 @@ CREATE INDEX idx_workout_logs_completed_at ON workout_logs(completed_at);
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
     const limit = parseInt(searchParams.get("limit") || "10");
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 },
-      );
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const { supabase, user } = auth;
+    const userId = user.id;
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
-
-    const { data: logs, error } = await supabaseAdmin
+    // Fetch logs (RLS enforces user_id = auth.uid())
+    const { data: logs, error } = await supabase
       .from("workout_logs")
       .select("*")
       .eq("user_id", userId)

@@ -109,9 +109,7 @@ export default function DashboardPage() {
         logEventClient("plan_viewed", { plan_id: planData.id });
 
         try {
-          const response = await fetch(
-            `/api/workout/log?userId=${user.id}&limit=20`,
-          );
+          const response = await fetch("/api/workout/log?limit=20");
           const data = await response.json();
           if (data.logs) {
             const currentPlanLogs = data.logs.filter(

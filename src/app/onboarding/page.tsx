@@ -305,7 +305,6 @@ Let's start simple: **What's your main fitness goal?** For example:
             role: m.role,
             content: m.content,
           })),
-          userId,
         }),
       });
 

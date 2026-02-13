@@ -129,7 +129,7 @@ export default function ProgressPage() {
       // Load workout stats
       try {
         const response = await fetch(
-          `/api/workout/log?userId=${user.id}&limit=100`
+          `/api/workout/log?userId=${user.id}&limit=100`,
         );
         const data = await response.json();
         if (data.stats) {
@@ -165,7 +165,7 @@ export default function ProgressPage() {
     // Sort by date descending
     const sortedLogs = [...logs].sort(
       (a, b) =>
-        new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
+        new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime(),
     );
 
     // Check consecutive days
@@ -175,7 +175,7 @@ export default function ProgressPage() {
       logDate.setHours(0, 0, 0, 0);
 
       const diffDays = Math.floor(
-        (checkDate.getTime() - logDate.getTime()) / (1000 * 60 * 60 * 24)
+        (checkDate.getTime() - logDate.getTime()) / (1000 * 60 * 60 * 24),
       );
 
       if (diffDays <= 1) {
@@ -201,7 +201,7 @@ export default function ProgressPage() {
       const response = await fetch("/api/progress/weight", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, weight_kg: weight }),
+        body: JSON.stringify({ weight_kg: weight }),
       });
 
       const data = await response.json();
@@ -425,8 +425,8 @@ export default function ProgressPage() {
                           weightChange < 0
                             ? "text-green-500"
                             : weightChange > 0
-                            ? "text-red-500"
-                            : "text-muted-foreground"
+                              ? "text-red-500"
+                              : "text-muted-foreground"
                         }`}
                       >
                         {weightChange < 0 ? (
@@ -506,11 +506,11 @@ export default function ProgressPage() {
                       <path
                         d={`
                           M ${40 + (0 / (weightEntries.length - 1)) * 350} ${
-                          20 +
-                          ((weightMax - weightEntries[0].weight_kg) /
-                            (weightMax - weightMin)) *
-                            160
-                        }
+                            20 +
+                            ((weightMax - weightEntries[0].weight_kg) /
+                              (weightMax - weightMin)) *
+                              160
+                          }
                           ${weightEntries
                             .map((entry, i) => {
                               const x =
@@ -608,7 +608,7 @@ export default function ProgressPage() {
                                 weekday: "short",
                                 month: "short",
                                 day: "numeric",
-                              }
+                              },
                             )}
                           </span>
                           <span className="font-medium">

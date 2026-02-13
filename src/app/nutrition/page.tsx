@@ -107,7 +107,7 @@ export default function NutritionPage() {
       setUserId(user.id);
 
       try {
-        const response = await fetch(`/api/nutrition?userId=${user.id}`);
+        const response = await fetch("/api/nutrition");
         const data = await response.json();
 
         if (data.calculations) {
@@ -139,7 +139,7 @@ export default function NutritionPage() {
       const response = await fetch("/api/nutrition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify({}),
       });
 
       const data = await response.json();
@@ -287,10 +287,10 @@ export default function NutritionPage() {
                 {profile?.fitness_goal === "lose weight"
                   ? "-20%"
                   : profile?.fitness_goal === "build muscle"
-                  ? "+10%"
-                  : profile?.fitness_goal === "increase strength"
-                  ? "+5%"
-                  : "0%"}
+                    ? "+10%"
+                    : profile?.fitness_goal === "increase strength"
+                      ? "+5%"
+                      : "0%"}
               </span>
             </div>
             <Separator />
