@@ -262,22 +262,17 @@ Generate a new 7-day workout plan with appropriate adaptations. Return ONLY vali
 // GET endpoint to retrieve check-in history
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 });
+    // Authenticate user via session
+    const auth = await getAuthenticatedClient();
+    if (!auth) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    );
+    const { supabase, user } = auth;
 
     const { data, error } = await supabase
       .from("weekly_checkins")
       .select("*")
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) {
