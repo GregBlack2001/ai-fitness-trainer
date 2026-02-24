@@ -98,6 +98,51 @@ export async function POST(request: Request) {
       );
     }
 
+    // Handle profile updates if user changed days or goal
+    const profileUpdates: any = {};
+    let daysChanged = false;
+    let goalChanged = false;
+
+    if (
+      checkinData.changeWorkoutDays &&
+      checkinData.newWorkoutDays?.length > 0
+    ) {
+      profileUpdates.available_days = checkinData.newWorkoutDays;
+      daysChanged = true;
+      console.log(
+        "📅 User changing workout days to:",
+        checkinData.newWorkoutDays,
+      );
+    }
+
+    if (checkinData.changeGoal && checkinData.newGoal) {
+      profileUpdates.fitness_goal = checkinData.newGoal;
+      goalChanged = true;
+      console.log("🎯 User changing goal to:", checkinData.newGoal);
+    }
+
+    // Update profile if changes were made
+    if (Object.keys(profileUpdates).length > 0) {
+      const { error: profileUpdateError } = await supabase
+        .from("profiles")
+        .update(profileUpdates)
+        .eq("id", userId);
+
+      if (profileUpdateError) {
+        console.error("Failed to update profile:", profileUpdateError);
+      } else {
+        console.log("✅ Profile updated with new preferences");
+      }
+    }
+
+    // Use updated values for plan generation
+    const effectiveDays = daysChanged
+      ? checkinData.newWorkoutDays
+      : profile.available_days;
+    const effectiveGoal = goalChanged
+      ? checkinData.newGoal
+      : profile.fitness_goal;
+
     // Build context for AI adaptation
     const checkinHistory =
       previousCheckins?.map((c) => ({
@@ -110,15 +155,74 @@ export async function POST(request: Request) {
         wantedEasier: c.want_easier,
       })) || [];
 
+    // Determine goal-specific training parameters
+    const goalLower = (effectiveGoal || "").toLowerCase();
+    let repGuidance = "8-12 reps for hypertrophy";
+    let restGuidance = "60-90 seconds";
+    let focusGuidance = "balanced muscle building";
+
+    if (
+      goalLower.includes("strength") ||
+      goalLower.includes("strong") ||
+      goalLower.includes("power")
+    ) {
+      repGuidance = "3-6 reps for strength";
+      restGuidance = "2-3 minutes";
+      focusGuidance = "heavy compound movements, progressive overload";
+    } else if (
+      goalLower.includes("endurance") ||
+      goalLower.includes("tone") ||
+      goalLower.includes("lean")
+    ) {
+      repGuidance = "12-20 reps for endurance/toning";
+      restGuidance = "30-60 seconds";
+      focusGuidance = "higher rep ranges, circuit-style training, more cardio";
+    } else if (
+      goalLower.includes("lose") ||
+      goalLower.includes("weight loss") ||
+      goalLower.includes("fat")
+    ) {
+      repGuidance = "10-15 reps with moderate weight";
+      restGuidance = "30-60 seconds";
+      focusGuidance = "metabolic conditioning, supersets, HIIT elements";
+    } else if (
+      goalLower.includes("muscle") ||
+      goalLower.includes("mass") ||
+      goalLower.includes("bulk")
+    ) {
+      repGuidance = "8-12 reps for muscle growth";
+      restGuidance = "60-90 seconds";
+      focusGuidance =
+        "hypertrophy training, progressive overload, muscle isolation";
+    }
+
     // Generate adapted workout plan
+    const allDays = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+    const workoutDays = effectiveDays || ["Monday", "Wednesday", "Friday"];
+    const restDays = allDays.filter((d) => !workoutDays.includes(d));
+
     const adaptationPrompt = `You are a fitness coach adapting a workout plan based on weekly check-in feedback.
 
 USER PROFILE:
-- Goal: ${profile.fitness_goal}
+- Goal: ${effectiveGoal} ${goalChanged ? "(JUST CHANGED - adapt training style accordingly!)" : ""}
 - Level: ${profile.fitness_level}
 - Equipment: ${profile.equipment_access}
-- Available days: ${profile.available_days?.join(", ") || "Not specified"}
+- Available days: ${workoutDays.join(", ")} ${daysChanged ? "(JUST CHANGED - restructure the week accordingly!)" : ""}
+- Rest days: ${restDays.join(", ")}
 - Injuries/limitations: ${profile.injuries?.join(", ") || "None"}
+
+GOAL-SPECIFIC TRAINING PARAMETERS:
+- Rep Range: ${repGuidance}
+- Rest Periods: ${restGuidance}
+- Training Focus: ${focusGuidance}
 
 CURRENT WEEK CHECK-IN:
 - Energy level: ${checkinData.energyLevel}/5
@@ -131,6 +235,28 @@ CURRENT WEEK CHECK-IN:
 - Favorite exercises: ${checkinData.favoriteExercises || "None mentioned"}
 - User notes: ${checkinData.notes || "None"}
 - Progress toward goals: ${checkinData.goalsProgress || "Not specified"}
+
+${
+  daysChanged
+    ? `
+⚠️ USER CHANGED WORKOUT DAYS:
+- Previous: ${profile.available_days?.join(", ") || "Unknown"}
+- New: ${workoutDays.join(", ")}
+- MUST restructure the plan to match the new schedule!
+`
+    : ""
+}
+
+${
+  goalChanged
+    ? `
+⚠️ USER CHANGED FITNESS GOAL:
+- Previous: ${profile.fitness_goal}
+- New: ${effectiveGoal}
+- MUST adjust training style, rep ranges, and exercise selection to match new goal!
+`
+    : ""
+}
 
 PREVIOUS CHECK-IN HISTORY:
 ${checkinHistory.length > 0 ? JSON.stringify(checkinHistory, null, 2) : "No previous check-ins"}
@@ -153,8 +279,9 @@ ADAPTATION RULES:
 3. If completion rate < 70%: Simplify exercises, reduce time commitment
 4. If problem exercises mentioned: Replace with alternatives targeting same muscles
 5. If favorite exercises mentioned: Include more of these or similar movements
-6. Always maintain the same workout days structure
-7. Progressive overload: Slightly increase difficulty each week unless user struggling
+6. If GOAL CHANGED: Completely restructure exercise selection and rep schemes to match new goal
+7. If DAYS CHANGED: Restructure the week with workout days on ${workoutDays.join(", ")} and rest days on ${restDays.join(", ")}
+8. Progressive overload: Slightly increase difficulty each week unless user struggling
 
 Generate a new 7-day workout plan with appropriate adaptations. Return ONLY valid JSON matching this structure:
 {

@@ -594,6 +594,31 @@ export function validateCheckinData(data: any): {
     data.favoriteExercises || "",
   ).slice(0, 500);
 
+  // New fields for plan changes
+  sanitized.changeWorkoutDays = Boolean(data.changeWorkoutDays);
+  sanitized.changeGoal = Boolean(data.changeGoal);
+
+  // Validate new workout days (array of valid day names)
+  if (data.newWorkoutDays && Array.isArray(data.newWorkoutDays)) {
+    const validDays = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+    sanitized.newWorkoutDays = data.newWorkoutDays.filter((d: string) =>
+      validDays.includes(d),
+    );
+  } else {
+    sanitized.newWorkoutDays = [];
+  }
+
+  // Validate new goal (sanitize string)
+  sanitized.newGoal = sanitizeString(data.newGoal || "").slice(0, 100);
+
   return {
     valid: errors.length === 0,
     errors,

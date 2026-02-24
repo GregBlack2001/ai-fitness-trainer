@@ -22,6 +22,10 @@ import {
   Star,
   TrendingUp,
   CheckCircle2,
+  Calendar,
+  Target,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { logEventClient } from "@/lib/events";
 
@@ -39,6 +43,11 @@ type CheckinData = {
   wantEasier: boolean;
   problemExercises: string;
   favoriteExercises: string;
+  // New fields for plan changes
+  changeWorkoutDays: boolean;
+  newWorkoutDays: string[];
+  changeGoal: boolean;
+  newGoal: string;
 };
 
 type Props = {
@@ -48,6 +57,8 @@ type Props = {
   completedWorkouts: number;
   skippedWorkouts?: number;
   totalWorkouts: number;
+  currentDays?: string[];
+  currentGoal?: string;
   onCheckinComplete: (adaptations: string[]) => void;
 };
 
@@ -82,12 +93,56 @@ export function WeeklyCheckinModal({
   completedWorkouts,
   skippedWorkouts = 0,
   totalWorkouts,
+  currentDays = [],
+  currentGoal = "",
   onCheckinComplete,
 }: Props) {
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [adaptations, setAdaptations] = useState<string[]>([]);
+
+  const allDays = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+  const goalOptions = [
+    {
+      value: "lose weight",
+      label: "Lose Weight",
+      description: "Burn fat, calorie deficit",
+    },
+    {
+      value: "build muscle",
+      label: "Build Muscle",
+      description: "Gain mass, hypertrophy",
+    },
+    {
+      value: "get stronger",
+      label: "Get Stronger",
+      description: "Increase strength, lift heavier",
+    },
+    {
+      value: "improve endurance",
+      label: "Improve Endurance",
+      description: "Better stamina, cardio fitness",
+    },
+    {
+      value: "general fitness",
+      label: "General Fitness",
+      description: "Overall health and wellness",
+    },
+    {
+      value: "tone up",
+      label: "Tone Up",
+      description: "Lean muscle, definition",
+    },
+  ];
 
   const [checkinData, setCheckinData] = useState<CheckinData>({
     energyLevel: 3,
@@ -102,6 +157,10 @@ export function WeeklyCheckinModal({
     wantEasier: false,
     problemExercises: "",
     favoriteExercises: "",
+    changeWorkoutDays: false,
+    newWorkoutDays: currentDays,
+    changeGoal: false,
+    newGoal: currentGoal,
   });
 
   const handleSubmit = async () => {
@@ -138,7 +197,7 @@ export function WeeklyCheckinModal({
     }
   };
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   if (submitted) {
     return (
@@ -383,8 +442,161 @@ export function WeeklyCheckinModal({
             </div>
           )}
 
-          {/* Step 4: Goals & Notes */}
+          {/* Step 4: Change Days & Goals */}
           {step === 4 && (
+            <div className="space-y-6">
+              {/* Change Workout Days */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-blue-500" />
+                    Change workout days?
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCheckinData({
+                        ...checkinData,
+                        changeWorkoutDays: !checkinData.changeWorkoutDays,
+                        newWorkoutDays: checkinData.changeWorkoutDays
+                          ? currentDays
+                          : checkinData.newWorkoutDays,
+                      })
+                    }
+                    className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                      checkinData.changeWorkoutDays
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted hover:bg-muted/80"
+                    }`}
+                  >
+                    {checkinData.changeWorkoutDays ? "Yes" : "No"}
+                  </button>
+                </div>
+
+                {checkinData.changeWorkoutDays && (
+                  <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Select your workout days (
+                      {checkinData.newWorkoutDays.length} selected):
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {allDays.map((day) => {
+                        const isSelected =
+                          checkinData.newWorkoutDays.includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => {
+                              const newDays = isSelected
+                                ? checkinData.newWorkoutDays.filter(
+                                    (d) => d !== day,
+                                  )
+                                : [...checkinData.newWorkoutDays, day];
+                              setCheckinData({
+                                ...checkinData,
+                                newWorkoutDays: newDays,
+                              });
+                            }}
+                            className={`px-2 py-2 rounded-lg text-xs font-medium transition-all ${
+                              isSelected
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted hover:bg-muted/80"
+                            }`}
+                          >
+                            {day.slice(0, 3)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Current:{" "}
+                      {currentDays.map((d) => d.slice(0, 3)).join(", ") ||
+                        "None"}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Change Fitness Goal */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-green-500" />
+                    Change fitness goal?
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCheckinData({
+                        ...checkinData,
+                        changeGoal: !checkinData.changeGoal,
+                        newGoal: checkinData.changeGoal
+                          ? currentGoal
+                          : checkinData.newGoal,
+                      })
+                    }
+                    className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
+                      checkinData.changeGoal
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted hover:bg-muted/80"
+                    }`}
+                  >
+                    {checkinData.changeGoal ? "Yes" : "No"}
+                  </button>
+                </div>
+
+                {checkinData.changeGoal && (
+                  <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Select your new goal:
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {goalOptions.map((goal) => {
+                        const isSelected =
+                          checkinData.newGoal
+                            .toLowerCase()
+                            .includes(goal.value.toLowerCase()) ||
+                          goal.value
+                            .toLowerCase()
+                            .includes(checkinData.newGoal.toLowerCase());
+                        return (
+                          <button
+                            key={goal.value}
+                            type="button"
+                            onClick={() =>
+                              setCheckinData({
+                                ...checkinData,
+                                newGoal: goal.value,
+                              })
+                            }
+                            className={`p-3 rounded-lg text-left transition-all border-2 ${
+                              checkinData.newGoal === goal.value
+                                ? "border-primary bg-primary/10"
+                                : "border-muted hover:border-muted-foreground/30"
+                            }`}
+                          >
+                            <span className="text-sm font-medium block">
+                              {goal.label}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {goal.description}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Current: {currentGoal || "Not set"}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Goals & Notes */}
+          {step === 5 && (
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label>How do you feel about your progress?</Label>

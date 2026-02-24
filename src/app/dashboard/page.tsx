@@ -867,6 +867,8 @@ export default function DashboardPage() {
               (w: any) => !w.isRestDay && w.exercises?.length > 0,
             ).length || 0
           }
+          currentDays={profile?.available_days || []}
+          currentGoal={profile?.fitness_goal || ""}
           onCheckinComplete={handleCheckinComplete}
         />
       )}
