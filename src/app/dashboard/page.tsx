@@ -36,6 +36,7 @@ import {
   Eye,
   X,
   SkipForward,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 import { logEventClient } from "@/lib/events";
@@ -215,17 +216,95 @@ export default function DashboardPage() {
     return workoutLogs.find((log) => log.day_index === dayIndex);
   };
 
-  // Find next workout to do (skip rest days and handled workouts)
+  // Get current day info for missed day logic
+  const getDayStatus = (dayIndex: number, workout: any) => {
+    const dayOrder = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+    const today = new Date();
+    const currentDayName = today.toLocaleDateString("en-US", {
+      weekday: "long",
+    });
+    const todayIndex = dayOrder.indexOf(currentDayName);
+    const workoutDayIndex = dayOrder.indexOf(workout.day);
+
+    const isRestDay = workout.isRestDay || workout.exercises?.length === 0;
+    const completed = !isRestDay && isWorkoutCompleted(dayIndex);
+    const skipped = !isRestDay && isWorkoutSkipped(dayIndex);
+
+    // Calculate if this day is in the past
+    const isPastDay = workoutDayIndex < todayIndex;
+    const isToday = workoutDayIndex === todayIndex;
+
+    // Check if within 48-hour grace period
+    // Past day that's not handled = missed (but allow completion within grace period)
+    const daysDiff = todayIndex - workoutDayIndex;
+    const withinGracePeriod = daysDiff <= 2; // 48 hours = 2 days
+
+    // Determine if this is a "missed" workout
+    const isMissed = isPastDay && !isRestDay && !completed && !skipped;
+    const canStillComplete = isMissed && withinGracePeriod;
+    const isExpired = isMissed && !withinGracePeriod;
+
+    return {
+      isRestDay,
+      completed,
+      skipped,
+      isPastDay,
+      isToday,
+      isMissed,
+      canStillComplete,
+      isExpired,
+      daysDiff,
+    };
+  };
+
+  // Find next workout to do (skip rest days, handled workouts, and expired missed days)
   const getNextWorkout = () => {
     if (!plan?.exercises?.workouts) return null;
     const workouts = plan.exercises.workouts;
+    const dayOrder = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+    const today = new Date();
+    const currentDayName = today.toLocaleDateString("en-US", {
+      weekday: "long",
+    });
+    const todayIndex = dayOrder.indexOf(currentDayName);
+
+    // First, look for today's workout or future workouts
     for (let i = 0; i < workouts.length; i++) {
+      const workoutDayIndex = dayOrder.indexOf(workouts[i].day);
       const isRestDay =
         workouts[i].isRestDay || workouts[i].exercises?.length === 0;
-      if (!isRestDay && !isWorkoutHandled(i)) {
+      const isPastDay = workoutDayIndex < todayIndex;
+
+      // Skip past days, rest days, and handled workouts
+      if (!isPastDay && !isRestDay && !isWorkoutHandled(i)) {
         return { workout: workouts[i], index: i };
       }
     }
+
+    // If no future workouts, check for missed workouts within grace period
+    for (let i = 0; i < workouts.length; i++) {
+      const status = getDayStatus(i, workouts[i]);
+      if (status.canStillComplete) {
+        return { workout: workouts[i], index: i };
+      }
+    }
+
     return null;
   };
 
@@ -434,15 +513,13 @@ export default function DashboardPage() {
               {workouts.length > 0 ? (
                 <div className="space-y-3">
                   {workouts.map((workout: any, index: number) => {
-                    const isRestDay =
-                      workout.isRestDay || workout.exercises?.length === 0;
-                    const completed = !isRestDay && isWorkoutCompleted(index);
-                    const skipped = !isRestDay && isWorkoutSkipped(index);
+                    const status = getDayStatus(index, workout);
                     const log = getWorkoutLog(index);
-                    const isNext = nextWorkout?.index === index && !isRestDay;
+                    const isNext =
+                      nextWorkout?.index === index && !status.isRestDay;
 
                     // Rest day card
-                    if (isRestDay) {
+                    if (status.isRestDay) {
                       return (
                         <Card
                           key={index}
@@ -473,14 +550,100 @@ export default function DashboardPage() {
                       );
                     }
 
-                    // Workout day card
+                    // Expired missed workout (past grace period) - auto-mark as missed
+                    if (status.isExpired) {
+                      return (
+                        <Card
+                          key={index}
+                          className="border-0 shadow-sm bg-slate-100 dark:bg-slate-800/30 opacity-60"
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-slate-300 dark:bg-slate-700 text-slate-500">
+                                <X className="h-6 w-6" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="font-semibold text-slate-500">
+                                    {workout.day}
+                                  </h3>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-slate-500 border-slate-400 text-xs"
+                                  >
+                                    Missed
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-slate-500">
+                                  {workout.focus}
+                                </p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <p className="text-sm text-slate-500">
+                                  {workout.duration_minutes} min
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    }
+
+                    // Missed but within grace period - can still complete
+                    if (status.canStillComplete) {
+                      return (
+                        <Card
+                          key={index}
+                          className="border-0 shadow-md transition-all cursor-pointer hover:shadow-lg bg-orange-50 dark:bg-orange-950/20 ring-1 ring-orange-300 dark:ring-orange-800"
+                          onClick={() => handleStartWorkout(index)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-orange-500 text-white">
+                                <AlertTriangle className="h-6 w-6" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h3 className="font-semibold">
+                                    {workout.day}
+                                  </h3>
+                                  <Badge className="bg-orange-500 text-white text-xs">
+                                    Missed
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {workout.focus}
+                                </p>
+                                <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                                  {status.daysDiff === 1
+                                    ? "Yesterday"
+                                    : `${status.daysDiff} days ago`}{" "}
+                                  — tap to complete now
+                                </p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <p className="text-sm font-medium">
+                                  {workout.duration_minutes} min
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {workout.exercises?.length} exercises
+                                </p>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-orange-500" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    }
+
+                    // Regular workout day card (completed, skipped, next, or future)
                     return (
                       <Card
                         key={index}
                         className={`border-0 shadow-md transition-all cursor-pointer hover:shadow-lg ${
-                          completed
+                          status.completed
                             ? "bg-emerald-50 dark:bg-emerald-950/30"
-                            : skipped
+                            : status.skipped
                               ? "bg-amber-50 dark:bg-amber-950/30"
                               : isNext
                                 ? "bg-primary/5 ring-2 ring-primary"
@@ -493,18 +656,18 @@ export default function DashboardPage() {
                             {/* Status Circle */}
                             <div
                               className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                                completed
+                                status.completed
                                   ? "bg-emerald-500 text-white"
-                                  : skipped
+                                  : status.skipped
                                     ? "bg-amber-500 text-white"
                                     : isNext
                                       ? "bg-primary text-white"
                                       : "bg-slate-100 dark:bg-slate-700 text-muted-foreground"
                               }`}
                             >
-                              {completed ? (
+                              {status.completed ? (
                                 <CheckCircle2 className="h-6 w-6" />
-                              ) : skipped ? (
+                              ) : status.skipped ? (
                                 <SkipForward className="h-6 w-6" />
                               ) : (
                                 <Dumbbell className="h-5 w-5" />
@@ -515,12 +678,22 @@ export default function DashboardPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 <h3 className="font-semibold">{workout.day}</h3>
-                                {isNext && !completed && !skipped && (
-                                  <Badge className="bg-primary text-white text-xs">
-                                    Next
-                                  </Badge>
-                                )}
-                                {skipped && (
+                                {status.isToday &&
+                                  !status.completed &&
+                                  !status.skipped && (
+                                    <Badge className="bg-blue-500 text-white text-xs">
+                                      Today
+                                    </Badge>
+                                  )}
+                                {isNext &&
+                                  !status.completed &&
+                                  !status.skipped &&
+                                  !status.isToday && (
+                                    <Badge className="bg-primary text-white text-xs">
+                                      Next
+                                    </Badge>
+                                  )}
+                                {status.skipped && (
                                   <Badge
                                     variant="outline"
                                     className="text-amber-600 border-amber-600 text-xs"
@@ -532,13 +705,13 @@ export default function DashboardPage() {
                               <p className="text-sm text-muted-foreground">
                                 {workout.focus}
                               </p>
-                              {completed && log && (
+                              {status.completed && log && (
                                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
                                   Completed in{" "}
                                   {Math.round(log.duration_seconds / 60)} min
                                 </p>
                               )}
-                              {skipped && (
+                              {status.skipped && (
                                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                                   Skipped this week
                                 </p>
