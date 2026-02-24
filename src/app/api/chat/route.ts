@@ -961,7 +961,7 @@ Use this context to provide personalized advice and make modifications when requ
 
     // Call OpenAI
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4.1",
       messages: [{ role: "system", content: systemWithContext }, ...messages],
       tools,
       tool_choice: "auto",
@@ -1071,7 +1071,7 @@ Use this context to provide personalized advice and make modifications when requ
 
     if (toolCalls?.length && !finalMessage) {
       const followUpResponse = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4.1",
         messages: [
           { role: "system", content: systemWithContext },
           ...messages,

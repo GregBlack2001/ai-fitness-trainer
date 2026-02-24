@@ -133,7 +133,7 @@ export async function POST(request: Request) {
     }
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4.1",
       messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
       tools,
       tool_choice: toolChoice,
@@ -286,7 +286,7 @@ Return a JSON object with ALL 7 days:
 Include warmup at the start of each workout day (not rest days). Return valid JSON only with all 7 days.`;
 
           const planResponse = await openai.chat.completions.create({
-            model: "gpt-4o",
+            model: "gpt-4.1",
             messages: [
               {
                 role: "system",
@@ -377,7 +377,7 @@ Click "Go to Dashboard" to see your full plan and start training!`,
       ];
 
       const followUpResponse = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: "gpt-4.1",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           ...followUpMessages,
