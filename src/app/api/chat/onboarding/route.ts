@@ -222,6 +222,9 @@ export async function POST(request: Request) {
             });
           }
 
+          // Import exercise database helper
+          const { generateExerciseContext } = await import("@/lib/exercises");
+
           // Generate workout plan
           const preferredDays = profile.available_days || [
             "Monday",
@@ -239,37 +242,120 @@ export async function POST(request: Request) {
           ];
           const restDays = allDays.filter((d) => !preferredDays.includes(d));
 
-          const planPrompt = `Create a week 1 workout plan for:
+          // Get equipment list
+          const equipmentDesc =
+            profile.equipment_access?.description ||
+            profile.equipment_access ||
+            "full gym";
+          const equipmentList = equipmentDesc.toLowerCase().includes("home")
+            ? ["dumbbells", "resistance_bands", "none"]
+            : equipmentDesc.toLowerCase().includes("none") ||
+                equipmentDesc.toLowerCase().includes("bodyweight")
+              ? ["none"]
+              : [
+                  "dumbbells",
+                  "barbell",
+                  "cables",
+                  "machine",
+                  "bench",
+                  "pull_up_bar",
+                ];
+
+          // Generate exercise context based on user profile
+          const exerciseContext = generateExerciseContext(
+            equipmentList,
+            profile.injuries || [],
+            profile.fitness_level || "intermediate",
+            profile.fitness_goal || "general fitness",
+          );
+
+          // Determine training parameters based on goal
+          const goalLower = (profile.fitness_goal || "").toLowerCase();
+          let repGuidance = "8-12 reps for hypertrophy";
+          let restGuidance = "60-90 seconds";
+          let setsGuidance = "3-4 sets";
+
+          if (
+            goalLower.includes("strength") ||
+            goalLower.includes("strong") ||
+            goalLower.includes("power")
+          ) {
+            repGuidance = "3-6 reps for strength";
+            restGuidance = "2-3 minutes";
+            setsGuidance = "4-5 sets";
+          } else if (
+            goalLower.includes("endurance") ||
+            goalLower.includes("tone") ||
+            goalLower.includes("lean") ||
+            goalLower.includes("weight loss")
+          ) {
+            repGuidance = "12-20 reps for endurance/toning";
+            restGuidance = "30-60 seconds";
+            setsGuidance = "3 sets";
+          } else if (
+            goalLower.includes("muscle") ||
+            goalLower.includes("mass") ||
+            goalLower.includes("bulk") ||
+            goalLower.includes("hypertrophy")
+          ) {
+            repGuidance = "8-12 reps for muscle growth";
+            restGuidance = "60-90 seconds";
+            setsGuidance = "3-4 sets";
+          }
+
+          const planPrompt = `Create a scientifically-structured Week 1 workout plan.
+
+USER PROFILE:
 - Age: ${profile.age}
 - Gender: ${profile.gender}
 - Goal: ${profile.fitness_goal}
 - Fitness Level: ${profile.fitness_level}
 - Preferred Workout Days: ${preferredDays.join(", ")}
 - Rest Days: ${restDays.join(", ")}
-- Equipment: ${profile.equipment_access?.description || profile.equipment_access || "Full gym"}
-- Injuries to work around: ${profile.injuries?.length > 0 ? profile.injuries.join(", ") : "None"}
+- Equipment Available: ${equipmentDesc}
+- Injuries/Limitations: ${profile.injuries?.length > 0 ? profile.injuries.join(", ") : "None"}
 
-IMPORTANT: Create ALL 7 days of the week. 
-- Workout days (${preferredDays.join(", ")}): Full workouts with exercises
-- Rest days (${restDays.join(", ")}): Mark as rest/recovery days
+TRAINING PARAMETERS FOR THIS GOAL:
+- Rep Range: ${repGuidance}
+- Rest Between Sets: ${restGuidance}
+- Sets Per Exercise: ${setsGuidance}
 
-Each workout should be ${profile.fitness_level === "beginner" ? "30-40" : profile.fitness_level === "advanced" ? "50-70" : "40-55"} minutes.
+${exerciseContext}
+
+PROGRAMMING RULES:
+1. Order exercises: Compound movements FIRST, then isolation
+2. Pair opposing muscle groups (e.g., push/pull) when appropriate
+3. Include 1-2 warmup exercises at start of each workout (light cardio or dynamic stretching)
+4. ${profile.fitness_level === "beginner" ? "Limit to 4-5 exercises per workout" : profile.fitness_level === "advanced" ? "Include 6-8 exercises per workout" : "Include 5-6 exercises per workout"}
+5. AVOID exercises contraindicated for their injuries
+6. Each workout: ${profile.fitness_level === "beginner" ? "30-40" : profile.fitness_level === "advanced" ? "50-70" : "40-55"} minutes
+
+SPLIT SUGGESTIONS based on ${preferredDays.length} workout days:
+${
+  preferredDays.length <= 3
+    ? "- Use Full Body or Upper/Lower split"
+    : preferredDays.length === 4
+      ? "- Use Upper/Lower split (2 upper, 2 lower days)"
+      : preferredDays.length >= 5
+        ? "- Use Push/Pull/Legs or Body Part split"
+        : ""
+}
 
 Return a JSON object with ALL 7 days:
 {
   "workouts": [
     {
       "day": "Monday",
-      "focus": "Upper Body",
+      "focus": "Upper Body Push",
       "isRestDay": false,
       "duration_minutes": 45,
       "exercises": [
         {
-          "name": "Bench Press",
+          "name": "Exercise Name",
           "sets": 3,
           "reps": 10,
           "rest_seconds": 90,
-          "notes": "Keep core tight"
+          "notes": "Form cues here"
         }
       ]
     },
@@ -283,14 +369,15 @@ Return a JSON object with ALL 7 days:
   ]
 }
 
-Include warmup at the start of each workout day (not rest days). Return valid JSON only with all 7 days.`;
+Return valid JSON only with all 7 days. Use exercises from the AVAILABLE EXERCISES list above.`;
 
           const planResponse = await openai.chat.completions.create({
             model: "gpt-4.1",
             messages: [
               {
                 role: "system",
-                content: "You are a fitness expert. Return only valid JSON.",
+                content:
+                  "You are an expert strength & conditioning coach. Create evidence-based workout programs. Return only valid JSON.",
               },
               { role: "user", content: planPrompt },
             ],

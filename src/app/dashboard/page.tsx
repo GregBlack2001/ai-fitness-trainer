@@ -283,8 +283,13 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center animate-pulse">
+            <Dumbbell className="h-6 w-6 text-white" />
+          </div>
+          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+        </div>
       </div>
     );
   }
@@ -314,14 +319,14 @@ export default function DashboardPage() {
   }, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+    <div className="min-h-screen pb-24">
       <main className="container mx-auto px-4 py-6 max-w-6xl">
         {/* Welcome Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-1">
+        <div className="mb-8 animate-slide-up">
+          <h1 className="text-3xl font-bold mb-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
             {getGreeting()}, {profile?.full_name?.split(" ")[0] || "there"}! 👋
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-slate-400">
             {completedWorkouts === 0
               ? "Ready to start your fitness journey?"
               : completedWorkouts < totalWorkouts
@@ -332,90 +337,86 @@ export default function DashboardPage() {
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Content - Left 2 columns */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 stagger-children">
             {/* Next Workout Card */}
             {nextWorkout ? (
-              <Card className="border-0 shadow-xl overflow-hidden bg-gradient-to-br from-primary via-primary to-primary/80">
-                <CardContent className="p-6 text-white">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <Badge className="bg-white/20 text-white border-0 mb-3">
-                        <Sparkles className="h-3 w-3 mr-1" />
-                        Up Next
-                      </Badge>
-                      <h2 className="text-2xl font-bold mb-1">
-                        {nextWorkout.workout.day}
-                      </h2>
-                      <p className="text-white/80">
-                        {nextWorkout.workout.focus}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-4xl font-bold">
-                        {nextWorkout.workout.duration_minutes}
-                      </p>
-                      <p className="text-white/80 text-sm">minutes</p>
-                    </div>
+              <div className="workout-card workout-card-active p-6 glow-primary">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 mb-3">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Up Next
+                    </Badge>
+                    <h2 className="text-2xl font-bold mb-1 text-white">
+                      {nextWorkout.workout.day}
+                    </h2>
+                    <p className="text-slate-400">
+                      {nextWorkout.workout.focus}
+                    </p>
                   </div>
-
-                  <div className="flex items-center gap-4 mb-6 text-sm text-white/80">
-                    <span className="flex items-center gap-1">
-                      <Dumbbell className="h-4 w-4" />
-                      {nextWorkout.workout.exercises?.length || 0} exercises
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Target className="h-4 w-4" />
-                      {nextWorkout.workout.exercises?.reduce(
-                        (s: number, e: any) => s + (e.sets || 0),
-                        0,
-                      )}{" "}
-                      sets
-                    </span>
-                    <button
-                      className="flex items-center gap-1 hover:text-white transition-colors"
-                      onClick={(e) =>
-                        handlePreviewWorkout(
-                          nextWorkout.workout,
-                          nextWorkout.index,
-                          e,
-                        )
-                      }
-                    >
-                      <Eye className="h-4 w-4" />
-                      Preview
-                    </button>
+                  <div className="text-right">
+                    <p className="text-4xl font-bold bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">
+                      {nextWorkout.workout.duration_minutes}
+                    </p>
+                    <p className="text-slate-500 text-sm">minutes</p>
                   </div>
+                </div>
 
-                  <Button
-                    size="lg"
-                    className="w-full bg-white text-primary hover:bg-white/90 h-14 text-lg font-semibold"
-                    onClick={() => handleStartWorkout(nextWorkout.index)}
+                <div className="flex items-center gap-4 mb-6 text-sm text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Dumbbell className="h-4 w-4" />
+                    {nextWorkout.workout.exercises?.length || 0} exercises
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Target className="h-4 w-4" />
+                    {nextWorkout.workout.exercises?.reduce(
+                      (s: number, e: any) => s + (e.sets || 0),
+                      0,
+                    )}{" "}
+                    sets
+                  </span>
+                  <button
+                    className="flex items-center gap-1 hover:text-violet-400 transition-colors"
+                    onClick={(e) =>
+                      handlePreviewWorkout(
+                        nextWorkout.workout,
+                        nextWorkout.index,
+                        e,
+                      )
+                    }
                   >
-                    <Play className="h-5 w-5 mr-2" />
-                    Start Workout
-                  </Button>
-                </CardContent>
-              </Card>
+                    <Eye className="h-4 w-4" />
+                    Preview
+                  </button>
+                </div>
+
+                <Button
+                  size="lg"
+                  className="w-full btn-primary h-14 text-lg font-semibold"
+                  onClick={() => handleStartWorkout(nextWorkout.index)}
+                >
+                  <Play className="h-5 w-5 mr-2" />
+                  Start Workout
+                </Button>
+              </div>
             ) : totalWorkouts > 0 ? (
-              <Card className="border-0 shadow-xl overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-500">
-                <CardContent className="p-6 text-white">
-                  <Trophy className="h-16 w-16 mx-auto mb-4 text-yellow-300" />
-                  <h2 className="text-2xl font-bold mb-2 text-center">
-                    Week {plan?.week_number} Complete! 🎉
-                  </h2>
-                  <p className="text-white/80 text-center mb-6">
-                    You've finished all {totalWorkouts} workouts. Amazing work!
-                  </p>
-                  <Button
-                    size="lg"
-                    className="w-full bg-white text-emerald-600 hover:bg-white/90 h-14 text-lg font-semibold"
-                    onClick={() => setShowNextWeekDialog(true)}
-                  >
-                    <Zap className="h-5 w-5 mr-2" />
-                    Generate Week {(plan?.week_number || 1) + 1}
-                  </Button>
-                </CardContent>
-              </Card>
+              <div className="workout-card workout-card-completed p-6 glow-success">
+                <Trophy className="h-16 w-16 mx-auto mb-4 text-yellow-400" />
+                <h2 className="text-2xl font-bold mb-2 text-center text-white">
+                  Week {plan?.week_number} Complete! 🎉
+                </h2>
+                <p className="text-slate-400 text-center mb-6">
+                  You've finished all {totalWorkouts} workouts. Amazing work!
+                </p>
+                <Button
+                  size="lg"
+                  className="w-full btn-success h-14 text-lg font-semibold"
+                  onClick={() => setShowNextWeekDialog(true)}
+                >
+                  <Zap className="h-5 w-5 mr-2" />
+                  Generate Week {(plan?.week_number || 1) + 1}
+                </Button>
+              </div>
             ) : null}
 
             {/* Weekly Schedule */}
