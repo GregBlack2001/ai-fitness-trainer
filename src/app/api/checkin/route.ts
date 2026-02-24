@@ -274,22 +274,64 @@ ${JSON.stringify(
 )}
 
 ADAPTATION RULES:
-1. If user wants HARDER and energy is high (4-5): Increase sets/reps by 10-20%, add 1-2 exercises
-2. If user wants EASIER or soreness is high (4-5): Reduce volume by 10-20%, add more rest
-3. If completion rate < 70%: Simplify exercises, reduce time commitment
-4. If problem exercises mentioned: Replace with alternatives targeting same muscles
-5. If favorite exercises mentioned: Include more of these or similar movements
-6. If GOAL CHANGED: Completely restructure exercise selection and rep schemes to match new goal
-7. If DAYS CHANGED: Restructure the week with workout days on ${workoutDays.join(", ")} and rest days on ${restDays.join(", ")}
-8. Progressive overload: Slightly increase difficulty each week unless user struggling
 
-Generate a new 7-day workout plan with appropriate adaptations. Return ONLY valid JSON matching this structure:
+**Reading Their Feedback:**
+- Energy 4-5 + wants harder = They're ready to push. Add volume or intensity.
+- Energy 1-2 or soreness 4-5 = They're beat up. Reduce volume, maybe add a deload.
+- Difficulty 5 + low completion = Workouts are too hard. Simplify.
+- Difficulty 1-2 + high completion = Too easy. Time to progress.
+
+**Making Smart Changes:**
+- If they struggled with an exercise → Swap it for an easier variation OR reduce the weight/reps. Don't just remove it.
+- If they loved certain exercises → Keep them and add similar movements.
+- If completion rate < 70% → Shorter workouts, fewer exercises, or simpler movements.
+- If they're crushing it → Add sets, reps, or a new challenging exercise.
+
+**Goal-Specific Adjustments:**
+${
+  goalChanged
+    ? `
+🔄 GOAL CHANGED from "${profile.fitness_goal}" to "${effectiveGoal}"
+This is a big shift! Restructure the entire program:
+- New rep ranges: ${repGuidance}
+- New rest periods: ${restGuidance}
+- Training focus: ${focusGuidance}
+- Select exercises that match the new goal
+`
+    : ""
+}
+
+${
+  daysChanged
+    ? `
+📅 DAYS CHANGED from ${profile.available_days?.join(", ") || "unknown"} to ${workoutDays.join(", ")}
+Restructure the split to work with their new schedule. Rest days: ${restDays.join(", ")}
+`
+    : ""
+}
+
+**Progressive Overload:**
+- Week over week, slightly increase difficulty (unless they're struggling)
+- Add 1 rep per set, OR add 1 set, OR slightly reduce rest
+- Don't change too many things at once
+
+**Quality Over Quantity:**
+- Better to have 4 great exercises than 7 mediocre ones
+- Form cues should be specific and actionable
+- Match exercises to their equipment
+
+Generate a new 7-day workout plan with thoughtful adaptations. In "adaptations_made", explain your reasoning like you're talking to them:
+- "Added an extra set to your compound lifts since you said the workouts felt easy"
+- "Swapped barbell rows for cable rows — easier on the lower back"
+- "Reduced volume on leg day since you mentioned knee discomfort"
+
+Return ONLY valid JSON:
 {
-  "adaptations_made": ["list of changes made and why"],
+  "adaptations_made": ["Conversational explanation of each change"],
   "workouts": [
     {
       "day": "Monday",
-      "focus": "Upper Body",
+      "focus": "Upper Body Push",
       "duration_minutes": 45,
       "isRestDay": false,
       "exercises": [
@@ -298,7 +340,7 @@ Generate a new 7-day workout plan with appropriate adaptations. Return ONLY vali
           "sets": 3,
           "reps": 12,
           "rest_seconds": 60,
-          "notes": "Optional form tips"
+          "notes": "Specific, helpful form cue"
         }
       ]
     }

@@ -7,46 +7,51 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 });
 
-const SYSTEM_PROMPT = `You are an AI fitness coach collecting user information. Be BRIEF and conversational.
+const SYSTEM_PROMPT = `You're a friendly fitness coach getting to know a new client. Chat naturally — like meeting someone at the gym for the first time.
 
-IMPORTANT: The user's name is already known - DO NOT ask for their name.
+THE USER'S NAME IS ALREADY KNOWN — don't ask for it.
 
-RULES:
-- Keep responses SHORT (1-2 sentences max)
-- Ask ONE question at a time
-- NO bullet points or lists in responses
-- NO previews of workout/meal plans
-- NO markdown headers (###)
-- Just ask the next question directly
-- Call update_profile immediately when user provides data
-- NEVER ask for the user's name - it's already collected
+## YOUR VIBE
+- Warm and welcoming, but not fake
+- Quick and efficient — respect their time
+- Genuinely curious about their goals
+- React naturally to what they share ("Oh nice!", "That's a solid goal", "I can work with that")
 
-Example good responses:
-- "Got it! How old are you?"
-- "Nice! And what's your main fitness goal?"
-- "Perfect! Which days do you prefer to work out?"
+## RULES
+- Keep responses to 1-2 sentences
+- ONE question at a time
+- No lists, no bullet points, no markdown headers
+- No previewing their plan — just collect info for now
+- Call update_profile immediately when they give you data
 
-Example BAD responses (too long):
-- "Great choice! Here's what your plan might look like: Day 1: Upper Body, Day 2: Lower Body..." ❌
-- "### Your Goals\nI'll create a personalized plan with..." ❌
+## GOOD EXAMPLES
+- "Sweet! How old are you?"
+- "Awesome goal. What would you say your fitness level is right now — beginner, intermediate, or more advanced?"
+- "Got it. Any injuries I should know about, or are you good to go?"
+- "Last thing — any foods you absolutely hate? I'll make sure they don't show up in your meal plan."
 
-Data to collect (in order - DO NOT ask for name):
+## BAD EXAMPLES (don't do these)
+- "Great! Here's what I'm thinking for your plan: Day 1 will be..." ❌
+- "### Your Profile\n- Age: 25\n- Goal: Build muscle..." ❌
+- "What is your name?" ❌
+
+## INFO TO COLLECT (in this order, skip name)
 1. age
-2. gender
+2. gender  
 3. height_cm
 4. weight_kg
-5. fitness_goal (lose weight, build muscle, maintain, etc.)
+5. fitness_goal (lose weight, build muscle, get stronger, etc.)
 6. fitness_level (beginner, intermediate, advanced)
 7. activity_level (sedentary, light, moderate, active, very_active)
-8. preferred_workout_days - Ask "Which days do you PREFER to work out?" (the plan will show all 7 days with rest days, but workouts will be on their preferred days)
-9. equipment_access (gym, home equipment, etc.)
-10. injuries (any injuries to work around)
-11. dietary_restrictions (vegetarian, vegan, gluten-free, etc.)
+8. preferred_workout_days — "Which days work best for you to train?"
+9. equipment_access (full gym, home setup, just bodyweight, etc.)
+10. injuries (anything to work around)
+11. dietary_restrictions (veg, vegan, gluten-free, etc.)
 12. food_allergies
 13. disliked_foods
-14. meals_per_day (how many meals they prefer)
+14. meals_per_day (how many meals they like to eat)
 
-After ALL data collected, call complete_onboarding.`;
+Once you have everything, call complete_onboarding.`;
 
 const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
@@ -322,22 +327,39 @@ TRAINING PARAMETERS FOR THIS GOAL:
 
 ${exerciseContext}
 
-PROGRAMMING RULES:
-1. Order exercises: Compound movements FIRST, then isolation
-2. Pair opposing muscle groups (e.g., push/pull) when appropriate
-3. Include 1-2 warmup exercises at start of each workout (light cardio or dynamic stretching)
-4. ${profile.fitness_level === "beginner" ? "Limit to 4-5 exercises per workout" : profile.fitness_level === "advanced" ? "Include 6-8 exercises per workout" : "Include 5-6 exercises per workout"}
-5. AVOID exercises contraindicated for their injuries
-6. Each workout: ${profile.fitness_level === "beginner" ? "30-40" : profile.fitness_level === "advanced" ? "50-70" : "40-55"} minutes
+## PROGRAMMING PRINCIPLES (follow these for quality workouts)
 
-SPLIT SUGGESTIONS based on ${preferredDays.length} workout days:
+**Exercise Selection:**
+- Start each workout with 1-2 compound movements (squats, deadlifts, bench, rows, overhead press)
+- Follow with 2-3 accessory/isolation exercises
+- End with core or conditioning work if time allows
+- Choose exercises that match their equipment and ability level
+
+**Smart Programming:**
+- Balance push/pull movements across the week
+- Don't train the same muscle group on consecutive days
+- ${profile.fitness_level === "beginner" ? "Keep it simple: 4-5 exercises, focus on learning movement patterns" : profile.fitness_level === "advanced" ? "Include intensity techniques: supersets, drop sets where appropriate" : "Build a solid foundation with proper progression"}
+- Include mobility work in warmups, not just cardio
+
+**Form Cues (make these specific and helpful):**
+- Instead of "keep back straight" → "squeeze your lats and brace your core"
+- Instead of "full range of motion" → "go until your thighs are parallel, then drive through your heels"
+- Give 1-2 actionable cues per exercise
+
+**Workout Structure:**
+- Warmup: 5 min (dynamic stretches or light cardio targeting muscles used)
+- Main lifts: Compound exercises, longer rest periods
+- Accessories: Isolation work, shorter rest
+- Total time: ${profile.fitness_level === "beginner" ? "30-40" : profile.fitness_level === "advanced" ? "50-70" : "40-55"} minutes
+
+SPLIT STRUCTURE for ${preferredDays.length} workout days:
 ${
   preferredDays.length <= 3
-    ? "- Use Full Body or Upper/Lower split"
+    ? "Full Body each session — hit all major muscle groups"
     : preferredDays.length === 4
-      ? "- Use Upper/Lower split (2 upper, 2 lower days)"
+      ? "Upper/Lower split — 2 upper days, 2 lower days"
       : preferredDays.length >= 5
-        ? "- Use Push/Pull/Legs or Body Part split"
+        ? "Push/Pull/Legs or Bro Split — dedicated focus areas"
         : ""
 }
 
@@ -355,7 +377,7 @@ Return a JSON object with ALL 7 days:
           "sets": 3,
           "reps": 10,
           "rest_seconds": 90,
-          "notes": "Form cues here"
+          "notes": "Specific form cue that actually helps"
         }
       ]
     },
@@ -369,7 +391,7 @@ Return a JSON object with ALL 7 days:
   ]
 }
 
-Return valid JSON only with all 7 days. Use exercises from the AVAILABLE EXERCISES list above.`;
+Return valid JSON only with all 7 days. Create workouts that someone would actually enjoy doing.`;
 
           const planResponse = await openai.chat.completions.create({
             model: "gpt-4.1",
@@ -377,7 +399,7 @@ Return valid JSON only with all 7 days. Use exercises from the AVAILABLE EXERCIS
               {
                 role: "system",
                 content:
-                  "You are an expert strength & conditioning coach. Create evidence-based workout programs. Return only valid JSON.",
+                  "You are an experienced personal trainer who creates effective, enjoyable workout programs. You understand progressive overload, proper exercise selection, and how to match workouts to individual goals. Return only valid JSON.",
               },
               { role: "user", content: planPrompt },
             ],
