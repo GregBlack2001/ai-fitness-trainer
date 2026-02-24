@@ -396,30 +396,39 @@ What can I help you with today?`,
   if (initialLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center animate-pulse">
+            <Sparkles className="h-6 w-6 text-white" />
+          </div>
+          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+    <div className="min-h-screen pb-20">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
+      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Link href="/dashboard">
-                <Button variant="ghost" size="icon">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-slate-400 hover:text-white hover:bg-slate-800"
+                >
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Sparkles className="h-5 w-5 text-primary" />
+                <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-full flex items-center justify-center">
+                  <Sparkles className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="font-semibold">AI Coach</h1>
-                  <p className="text-xs text-muted-foreground">
+                  <h1 className="font-semibold text-white">AI Coach</h1>
+                  <p className="text-xs text-slate-400">
                     {isSpeaking ? "Speaking..." : "Always here to help"}
                   </p>
                 </div>
@@ -439,14 +448,15 @@ What can I help you with today?`,
                     ? "Disable voice responses"
                     : "Enable voice responses"
                 }
+                className="text-slate-400 hover:text-white hover:bg-slate-800"
               >
                 {voiceEnabled ? (
-                  <Volume2 className="h-5 w-5 text-primary" />
+                  <Volume2 className="h-5 w-5 text-violet-400" />
                 ) : (
-                  <VolumeX className="h-5 w-5 text-muted-foreground" />
+                  <VolumeX className="h-5 w-5" />
                 )}
               </Button>
-              <Badge variant="secondary" className="gap-1">
+              <Badge className="gap-1 bg-slate-800 text-slate-300 border-slate-700">
                 <MessageSquare className="h-3 w-3" />
                 {messages.length - 1}
               </Badge>
@@ -461,10 +471,10 @@ What can I help you with today?`,
           <div className="flex-1 overflow-y-auto space-y-4 pb-4">
             {/* Disclaimer - shows only at start */}
             {messages.length <= 1 && (
-              <div className="bg-muted/50 border rounded-lg p-2 mb-2">
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-2 mb-2">
                 <div className="flex gap-2 items-start">
-                  <AlertCircle className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground">
+                  <AlertCircle className="h-3 w-3 text-slate-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-slate-500">
                     AI Coach provides general fitness guidance only, not medical
                     advice. Consult a healthcare provider for health concerns.
                   </p>
@@ -482,12 +492,12 @@ What can I help you with today?`,
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                       message.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-br-md"
-                        : "bg-muted rounded-bl-md"
+                        ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-br-md"
+                        : "bg-slate-800 border border-slate-700/50 text-slate-200 rounded-bl-md"
                     }`}
                   >
                     <div
-                      className="text-sm whitespace-pre-wrap prose prose-sm dark:prose-invert max-w-none"
+                      className="text-sm whitespace-pre-wrap"
                       dangerouslySetInnerHTML={{
                         __html: (message.content || "")
                           .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
@@ -502,7 +512,7 @@ What can I help you with today?`,
                       message.content && (
                         <button
                           onClick={() => speakText(message.content)}
-                          className="mt-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                          className="mt-2 text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1"
                         >
                           <Volume2 className="h-3 w-3" />
                           Listen
@@ -515,13 +525,13 @@ What can I help you with today?`,
                 {(message.planModified || message.mealPlanModified) && (
                   <div className="flex justify-start mt-2 ml-2 gap-2 flex-wrap">
                     {message.planModified && (
-                      <div className="flex items-center gap-2 text-xs text-green-600 bg-green-500/10 px-3 py-1.5 rounded-full">
+                      <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
                         <CheckCircle2 className="h-3 w-3" />
                         <span>Workout plan updated</span>
                       </div>
                     )}
                     {message.mealPlanModified && (
-                      <div className="flex items-center gap-2 text-xs text-orange-600 bg-orange-500/10 px-3 py-1.5 rounded-full">
+                      <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-full">
                         <CheckCircle2 className="h-3 w-3" />
                         <span>Meal plan updated</span>
                       </div>

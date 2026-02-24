@@ -245,25 +245,34 @@ export default function ProgressPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center animate-pulse">
+            <TrendingUp className="h-6 w-6 text-white" />
+          </div>
+          <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+    <div className="min-h-screen pb-20">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
+      <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-3">
             <Link href="/dashboard">
-              <Button variant="ghost" size="icon">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-slate-400 hover:text-white hover:bg-slate-800"
+              >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             </Link>
             <div>
-              <h1 className="font-semibold text-xl">Progress</h1>
-              <p className="text-xs text-muted-foreground">
+              <h1 className="font-semibold text-xl text-white">Progress</h1>
+              <p className="text-xs text-slate-400">
                 Track your fitness journey
               </p>
             </div>
@@ -274,71 +283,65 @@ export default function ProgressPage() {
       <div className="container mx-auto px-4 py-6 max-w-4xl space-y-6">
         {/* Stats Overview */}
         <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Workouts</p>
-                  <p className="text-3xl font-bold">
-                    {workoutStats.totalWorkouts}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                  <Dumbbell className="h-6 w-6 text-primary" />
-                </div>
+          <div className="stat-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Workouts</p>
+                <p className="text-3xl font-bold text-white">
+                  {workoutStats.totalWorkouts}
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="w-12 h-12 bg-violet-500/20 rounded-full flex items-center justify-center">
+                <Dumbbell className="h-6 w-6 text-violet-400" />
+              </div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Sets</p>
-                  <p className="text-3xl font-bold">{workoutStats.totalSets}</p>
-                </div>
-                <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center">
-                  <Target className="h-6 w-6 text-blue-500" />
-                </div>
+          <div className="stat-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Total Sets</p>
+                <p className="text-3xl font-bold text-white">
+                  {workoutStats.totalSets}
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center">
+                <Target className="h-6 w-6 text-blue-400" />
+              </div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Minutes</p>
-                  <p className="text-3xl font-bold">
-                    {workoutStats.totalMinutes}
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-green-500/10 rounded-full flex items-center justify-center">
-                  <Calendar className="h-6 w-6 text-green-500" />
-                </div>
+          <div className="stat-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Minutes</p>
+                <p className="text-3xl font-bold text-white">
+                  {workoutStats.totalMinutes}
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                <Calendar className="h-6 w-6 text-emerald-400" />
+              </div>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Streak</p>
-                  <p className="text-3xl font-bold">
-                    {workoutStats.currentStreak} 🔥
-                  </p>
-                </div>
-                <div className="w-12 h-12 bg-orange-500/10 rounded-full flex items-center justify-center">
-                  <Flame className="h-6 w-6 text-orange-500" />
-                </div>
+          <div className="stat-card">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Streak</p>
+                <p className="text-3xl font-bold text-white">
+                  {workoutStats.currentStreak} 🔥
+                </p>
               </div>
-            </CardContent>
-          </Card>
+              <div className="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center">
+                <Flame className="h-6 w-6 text-orange-400" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Weight Tracking Section */}
-        <Card>
+        <Card className="bg-slate-800/50 border-slate-700/50">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>

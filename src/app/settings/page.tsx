@@ -245,17 +245,26 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center animate-pulse">
+            <User className="h-6 w-6 text-white" />
+          </div>
+          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+    <div className="min-h-screen pb-20">
       <main className="container mx-auto px-4 py-6 max-w-2xl space-y-6">
         {/* Back button */}
         <Link href="/dashboard">
-          <Button variant="ghost" size="sm" className="gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-slate-400 hover:text-white hover:bg-slate-800"
+          >
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
           </Button>

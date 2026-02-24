@@ -161,7 +161,12 @@ export default function NutritionPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center animate-pulse">
+            <Apple className="h-6 w-6 text-white" />
+          </div>
+          <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+        </div>
       </div>
     );
   }
@@ -170,11 +175,15 @@ export default function NutritionPage() {
   const currentDayPlan = mealPlan?.days?.find((d) => d.day === selectedDay);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+    <div className="min-h-screen pb-20">
       <main className="container mx-auto px-4 py-6 max-w-4xl space-y-6">
         {/* Back button */}
         <Link href="/dashboard">
-          <Button variant="ghost" size="sm" className="gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-slate-400 hover:text-white hover:bg-slate-800"
+          >
             <ArrowLeft className="h-4 w-4" />
             Back to Dashboard
           </Button>
@@ -182,76 +191,70 @@ export default function NutritionPage() {
 
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold">Nutrition</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold text-white">Nutrition</h1>
+          <p className="text-slate-400">
             Your personalized macro targets and meal plans
           </p>
         </div>
 
         {/* Daily Targets Card */}
-        <Card className="border-0 shadow-lg bg-gradient-to-r from-orange-500/90 to-red-500 text-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <Flame className="h-5 w-5" />
-              Daily Targets
-            </CardTitle>
-            <CardDescription className="text-white/80">
-              Based on your profile and {profile?.fitness_goal || "fitness"}{" "}
-              goal
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center mb-6">
-              <p className="text-6xl font-bold">{macros?.calories || 0}</p>
-              <p className="text-white/80">calories per day</p>
+        <div className="rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 p-6 text-white shadow-xl shadow-orange-500/20">
+          <div className="flex items-center gap-2 mb-1">
+            <Flame className="h-5 w-5" />
+            <h2 className="text-lg font-semibold">Daily Targets</h2>
+          </div>
+          <p className="text-white/70 text-sm mb-6">
+            Based on your profile and {profile?.fitness_goal || "fitness"} goal
+          </p>
+
+          <div className="text-center mb-6">
+            <p className="text-6xl font-bold">{macros?.calories || 0}</p>
+            <p className="text-white/80">calories per day</p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            {/* Protein */}
+            <div className="bg-white/20 backdrop-blur rounded-xl p-4 text-center">
+              <Beef className="h-6 w-6 mx-auto mb-2" />
+              <p className="text-2xl font-bold">
+                {macros?.protein.grams || 0}g
+              </p>
+              <p className="text-sm text-white/80">Protein</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              {/* Protein */}
-              <div className="bg-white/20 rounded-xl p-4 text-center">
-                <Beef className="h-6 w-6 mx-auto mb-2" />
-                <p className="text-2xl font-bold">
-                  {macros?.protein.grams || 0}g
-                </p>
-                <p className="text-sm text-white/80">Protein</p>
-              </div>
-
-              {/* Carbs */}
-              <div className="bg-white/20 rounded-xl p-4 text-center">
-                <Wheat className="h-6 w-6 mx-auto mb-2" />
-                <p className="text-2xl font-bold">
-                  {macros?.carbs.grams || 0}g
-                </p>
-                <p className="text-sm text-white/80">Carbs</p>
-              </div>
-
-              {/* Fat */}
-              <div className="bg-white/20 rounded-xl p-4 text-center">
-                <Droplets className="h-6 w-6 mx-auto mb-2" />
-                <p className="text-2xl font-bold">{macros?.fat.grams || 0}g</p>
-                <p className="text-sm text-white/80">Fat</p>
-              </div>
+            {/* Carbs */}
+            <div className="bg-white/20 backdrop-blur rounded-xl p-4 text-center">
+              <Wheat className="h-6 w-6 mx-auto mb-2" />
+              <p className="text-2xl font-bold">{macros?.carbs.grams || 0}g</p>
+              <p className="text-sm text-white/80">Carbs</p>
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Fat */}
+            <div className="bg-white/20 backdrop-blur rounded-xl p-4 text-center">
+              <Droplets className="h-6 w-6 mx-auto mb-2" />
+              <p className="text-2xl font-bold">{macros?.fat.grams || 0}g</p>
+              <p className="text-sm text-white/80">Fat</p>
+            </div>
+          </div>
+        </div>
 
         {/* How It's Calculated */}
-        <Card className="border-0 shadow-md bg-white dark:bg-slate-800">
+        <Card className="bg-slate-800/50 border-slate-700/50">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
+            <CardTitle className="flex items-center gap-2 text-base text-white">
               <Info className="h-4 w-4" />
               How Your Targets Are Calculated
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">
-                Basal Metabolic Rate (BMR)
+              <span className="text-slate-400">Basal Metabolic Rate (BMR)</span>
+              <span className="font-medium text-white">
+                {calculations?.bmr || 0} kcal
               </span>
-              <span className="font-medium">{calculations?.bmr || 0} kcal</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">
+              <span className="text-slate-400">
                 Activity Level ({profile?.activity_level || "moderate"})
               </span>
               <span className="font-medium">
