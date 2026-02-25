@@ -4,9 +4,6 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -27,16 +24,14 @@ import {
   MessageSquare,
   BarChart3,
   Utensils,
-  Sparkles,
-  Calendar,
   Target,
-  Trophy,
   ArrowRight,
   Zap,
   Eye,
   X,
   SkipForward,
   AlertTriangle,
+  TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
 import { logEventClient } from "@/lib/events";
@@ -62,18 +57,16 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Weekly check-in state
+  // Modal states
   const [showCheckinModal, setShowCheckinModal] = useState(false);
-  const [weeklyAdaptations, setWeeklyAdaptations] = useState<string[]>([]);
-
-  // Next week generation state
   const [showNextWeekDialog, setShowNextWeekDialog] = useState(false);
-  const [feedback, setFeedback] = useState("");
-  const [generatingNextWeek, setGeneratingNextWeek] = useState(false);
-
-  // Preview state
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [previewWorkout, setPreviewWorkout] = useState<any>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
+  // Form states
+  const [feedback, setFeedback] = useState("");
+  const [generatingNextWeek, setGeneratingNextWeek] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -81,121 +74,60 @@ export default function DashboardPage() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
       if (!user) {
         router.push("/login");
         return;
       }
+
       setUserId(user.id);
 
-      // Load profile
+      // Fetch profile
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
         .eq("id", user.id)
         .single();
-      setProfile(profileData);
 
-      // Load active workout plan
+      if (profileData) {
+        setProfile(profileData);
+        if (!profileData.onboarding_completed) {
+          router.push("/onboarding");
+          return;
+        }
+      }
+
+      // Fetch active workout plan
       const { data: planData } = await supabase
         .from("workout_plans")
         .select("*")
         .eq("user_id", user.id)
         .eq("is_active", true)
         .single();
-      setPlan(planData);
 
-      // Load workout logs
       if (planData) {
-        // Log plan viewed event
-        logEventClient("plan_viewed", { plan_id: planData.id });
+        setPlan(planData);
 
-        try {
-          const response = await fetch("/api/workout/log?limit=20");
-          const data = await response.json();
-          if (data.logs) {
-            const currentPlanLogs = data.logs.filter(
-              (log: any) => log.plan_id === planData.id,
-            );
-            setWorkoutLogs(currentPlanLogs);
+        // Fetch workout logs for this plan
+        const { data: logsData } = await supabase
+          .from("workout_logs")
+          .select("*")
+          .eq("plan_id", planData.id)
+          .order("completed_at", { ascending: true });
 
-            // Check if week is complete (all workout days done or skipped)
-            const workoutDays =
-              planData.exercises?.workouts?.filter(
-                (w: any) => !w.isRestDay && w.exercises?.length > 0,
-              ) || [];
-
-            // Count unique day indices that have been completed or skipped
-            const handledDayIndices = new Set(
-              currentPlanLogs.map((log: any) => log.day_index),
-            );
-
-            // Get the actual day indices for workout days (not rest days)
-            const workoutDayIndices =
-              planData.exercises?.workouts
-                ?.map((w: any, idx: number) => ({ ...w, idx }))
-                .filter((w: any) => !w.isRestDay && w.exercises?.length > 0)
-                .map((w: any) => w.idx) || [];
-
-            // Check if all workout days have been handled (completed or skipped)
-            const allWorkoutDaysHandled = workoutDayIndices.every(
-              (idx: number) => handledDayIndices.has(idx),
-            );
-
-            const workoutDayCount = workoutDays.length;
-            const completedCount = currentPlanLogs.filter(
-              (log: any) => log.status !== "skipped",
-            ).length;
-            const skippedCount = currentPlanLogs.filter(
-              (log: any) => log.status === "skipped",
-            ).length;
-
-            if (allWorkoutDaysHandled && workoutDayCount > 0) {
-              // Check if we already showed check-in for this plan
-              const checkinShown = localStorage.getItem(
-                `checkin_shown_${planData.id}`,
-              );
-              if (!checkinShown) {
-                setShowCheckinModal(true);
-                localStorage.setItem(`checkin_shown_${planData.id}`, "true");
-              }
-            }
-          }
-        } catch (error) {
-          console.log("No workout logs yet");
+        if (logsData) {
+          setWorkoutLogs(logsData);
         }
       }
 
       setLoading(false);
+      logEventClient("dashboard_viewed", {});
     };
 
     loadData();
   }, [supabase, router]);
 
-  const handleCheckinComplete = (adaptations: string[]) => {
-    setWeeklyAdaptations(adaptations);
-    // Reload the page to get the new plan
-    window.location.reload();
-  };
-
-  const handleStartWorkout = (index: number) => {
-    router.push(`/workout/${index}`);
-  };
-
-  const handlePreviewWorkout = (
-    workout: any,
-    index: number,
-    e: React.MouseEvent,
-  ) => {
-    e.stopPropagation(); // Don't trigger the card click
-    setPreviewWorkout(workout);
-    setPreviewIndex(index);
-  };
-
-  const closePreview = () => {
-    setPreviewWorkout(null);
-    setPreviewIndex(null);
-  };
-
+  // Helper functions
   const isWorkoutCompleted = (dayIndex: number) => {
     return workoutLogs.some(
       (log) => log.day_index === dayIndex && log.status !== "skipped",
@@ -216,7 +148,7 @@ export default function DashboardPage() {
     return workoutLogs.find((log) => log.day_index === dayIndex);
   };
 
-  // Get current day info for missed day logic
+  // Get day status for missed day logic
   const getDayStatus = (dayIndex: number, workout: any) => {
     const dayOrder = [
       "Monday",
@@ -238,16 +170,11 @@ export default function DashboardPage() {
     const completed = !isRestDay && isWorkoutCompleted(dayIndex);
     const skipped = !isRestDay && isWorkoutSkipped(dayIndex);
 
-    // Calculate if this day is in the past
     const isPastDay = workoutDayIndex < todayIndex;
     const isToday = workoutDayIndex === todayIndex;
-
-    // Check if within 48-hour grace period
-    // Past day that's not handled = missed (but allow completion within grace period)
     const daysDiff = todayIndex - workoutDayIndex;
-    const withinGracePeriod = daysDiff <= 2; // 48 hours = 2 days
+    const withinGracePeriod = daysDiff <= 2;
 
-    // Determine if this is a "missed" workout
     const isMissed = isPastDay && !isRestDay && !completed && !skipped;
     const canStillComplete = isMissed && withinGracePeriod;
     const isExpired = isMissed && !withinGracePeriod;
@@ -265,7 +192,7 @@ export default function DashboardPage() {
     };
   };
 
-  // Find next workout to do (skip rest days, handled workouts, and expired missed days)
+  // Find next workout
   const getNextWorkout = () => {
     if (!plan?.exercises?.workouts) return null;
     const workouts = plan.exercises.workouts;
@@ -284,20 +211,19 @@ export default function DashboardPage() {
     });
     const todayIndex = dayOrder.indexOf(currentDayName);
 
-    // First, look for today's workout or future workouts
+    // Look for today or future workouts first
     for (let i = 0; i < workouts.length; i++) {
       const workoutDayIndex = dayOrder.indexOf(workouts[i].day);
       const isRestDay =
         workouts[i].isRestDay || workouts[i].exercises?.length === 0;
       const isPastDay = workoutDayIndex < todayIndex;
 
-      // Skip past days, rest days, and handled workouts
       if (!isPastDay && !isRestDay && !isWorkoutHandled(i)) {
         return { workout: workouts[i], index: i };
       }
     }
 
-    // If no future workouts, check for missed workouts within grace period
+    // Check for missed workouts within grace period
     for (let i = 0; i < workouts.length; i++) {
       const status = getDayStatus(i, workouts[i]);
       if (status.canStillComplete) {
@@ -308,7 +234,6 @@ export default function DashboardPage() {
     return null;
   };
 
-  // Get greeting based on time
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good morning";
@@ -316,7 +241,22 @@ export default function DashboardPage() {
     return "Good evening";
   };
 
-  // Handle generating next week
+  const handleStartWorkout = (index: number) => {
+    logEventClient("workout_started", { day_index: index });
+    router.push(`/workout/${index}`);
+  };
+
+  const handlePreviewWorkout = (
+    workout: any,
+    index: number,
+    e: React.MouseEvent,
+  ) => {
+    e.stopPropagation();
+    setPreviewWorkout(workout);
+    setPreviewIndex(index);
+    setShowPreviewDialog(true);
+  };
+
   const handleGenerateNextWeek = async () => {
     if (!profile?.id) return;
     setGeneratingNextWeek(true);
@@ -334,23 +274,11 @@ export default function DashboardPage() {
       const data = await response.json();
 
       if (data.success) {
-        // Close dialog and reset
         setShowNextWeekDialog(false);
         setFeedback("");
-        setWorkoutLogs([]); // Clear old logs
-
-        // Update plan state directly with new data
-        setPlan({
-          ...plan,
-          id: data.planId,
-          week_number: data.weekNumber,
-          exercises: data.plan,
-        });
-
-        // Also force a full page reload to ensure fresh data
-        window.location.href = "/dashboard";
+        window.location.reload();
       } else {
-        alert(data.message || data.error || "Failed to generate next week");
+        alert(data.message || "Failed to generate next week");
       }
     } catch (error) {
       console.error("Failed to generate next week:", error);
@@ -360,14 +288,18 @@ export default function DashboardPage() {
     }
   };
 
+  const handleCheckinComplete = (adaptations: string[]) => {
+    window.location.reload();
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center animate-pulse">
-            <Dumbbell className="h-6 w-6 text-white" />
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center animate-pulse">
+            <Dumbbell className="h-7 w-7 text-white" />
           </div>
-          <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+          <Loader2 className="h-5 w-5 animate-spin text-violet-400" />
         </div>
       </div>
     );
@@ -378,650 +310,552 @@ export default function DashboardPage() {
     (w: any) => !w.isRestDay && w.exercises?.length > 0,
   );
   const totalWorkouts = workoutDays.length;
-  const completedWorkouts = workoutLogs.length;
-  const progressPercentage =
-    totalWorkouts > 0 ? (completedWorkouts / totalWorkouts) * 100 : 0;
+  const completedCount = workoutLogs.filter(
+    (l) => l.status !== "skipped",
+  ).length;
+  const progressPercent =
+    totalWorkouts > 0 ? (completedCount / totalWorkouts) * 100 : 0;
   const nextWorkout = getNextWorkout();
-
-  // Calculate stats
-  const totalTimeSpent = workoutLogs.reduce(
+  const totalMinutes = workoutLogs.reduce(
     (sum, log) => sum + Math.round(log.duration_seconds / 60),
     0,
   );
-  const totalSets = workoutLogs.reduce((sum, log) => {
-    const workout = workouts[log.day_index];
-    if (!workout) return sum;
-    return (
-      sum +
-      workout.exercises?.reduce((s: number, e: any) => s + (e.sets || 0), 0)
-    );
-  }, 0);
+  const isWeekComplete =
+    completedCount + workoutLogs.filter((l) => l.status === "skipped").length >=
+      totalWorkouts && totalWorkouts > 0;
 
   return (
-    <div className="min-h-screen pb-24">
-      <main className="container mx-auto px-4 py-6 max-w-6xl">
-        {/* Welcome Header */}
-        <div className="mb-8 animate-slide-up">
-          <h1 className="text-3xl font-bold mb-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
-            {getGreeting()}, {profile?.full_name?.split(" ")[0] || "there"}! 👋
-          </h1>
-          <p className="text-slate-400">
-            {completedWorkouts === 0
-              ? "Ready to start your fitness journey?"
-              : completedWorkouts < totalWorkouts
-                ? "Keep up the great work!"
-                : "Amazing week! You crushed it! 🎉"}
-          </p>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Main Content - Left 2 columns */}
-          <div className="lg:col-span-2 space-y-6 stagger-children">
-            {/* Next Workout Card */}
-            {nextWorkout ? (
-              <div className="workout-card workout-card-active p-6 glow-primary">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 mb-3">
-                      <Sparkles className="h-3 w-3 mr-1" />
-                      Up Next
-                    </Badge>
-                    <h2 className="text-2xl font-bold mb-1 text-white">
-                      {nextWorkout.workout.day}
-                    </h2>
-                    <p className="text-slate-400">
-                      {nextWorkout.workout.focus}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-4xl font-bold bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">
-                      {nextWorkout.workout.duration_minutes}
-                    </p>
-                    <p className="text-slate-500 text-sm">minutes</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 mb-6 text-sm text-slate-400">
-                  <span className="flex items-center gap-1">
-                    <Dumbbell className="h-4 w-4" />
-                    {nextWorkout.workout.exercises?.length || 0} exercises
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Target className="h-4 w-4" />
-                    {nextWorkout.workout.exercises?.reduce(
-                      (s: number, e: any) => s + (e.sets || 0),
-                      0,
-                    )}{" "}
-                    sets
-                  </span>
-                  <button
-                    className="flex items-center gap-1 hover:text-violet-400 transition-colors"
-                    onClick={(e) =>
-                      handlePreviewWorkout(
-                        nextWorkout.workout,
-                        nextWorkout.index,
-                        e,
-                      )
-                    }
-                  >
-                    <Eye className="h-4 w-4" />
-                    Preview
-                  </button>
-                </div>
-
-                <Button
-                  size="lg"
-                  className="w-full btn-primary h-14 text-lg font-semibold"
-                  onClick={() => handleStartWorkout(nextWorkout.index)}
-                >
-                  <Play className="h-5 w-5 mr-2" />
-                  Start Workout
-                </Button>
-              </div>
-            ) : totalWorkouts > 0 ? (
-              <div className="workout-card workout-card-completed p-6 glow-success">
-                <Trophy className="h-16 w-16 mx-auto mb-4 text-yellow-400" />
-                <h2 className="text-2xl font-bold mb-2 text-center text-white">
-                  Week {plan?.week_number} Complete! 🎉
-                </h2>
-                <p className="text-slate-400 text-center mb-6">
-                  You've finished all {totalWorkouts} workouts. Amazing work!
-                </p>
-                <Button
-                  size="lg"
-                  className="w-full btn-success h-14 text-lg font-semibold"
-                  onClick={() => setShowNextWeekDialog(true)}
-                >
-                  <Zap className="h-5 w-5 mr-2" />
-                  Generate Week {(plan?.week_number || 1) + 1}
-                </Button>
-              </div>
-            ) : null}
-
-            {/* Weekly Schedule */}
+    <div className="min-h-screen bg-slate-950 pb-24">
+      {/* Header */}
+      <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-lg border-b border-slate-800/50">
+        <div className="px-4 py-4">
+          <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">
-                  Week {plan?.week_number || 1} Schedule
-                </h2>
-                <Badge variant="secondary">
-                  {completedWorkouts}/
-                  {workouts.filter((w: any) => !w.isRestDay).length} done
-                </Badge>
+              <p className="text-violet-400 text-xs font-medium tracking-wide uppercase">
+                Week {plan?.week_number || 1}
+              </p>
+              <h1 className="text-xl font-bold text-white mt-0.5">
+                {getGreeting()}, {profile?.full_name?.split(" ")[0] || "there"}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link href="/chat">
+                <button className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition-colors">
+                  <MessageSquare className="h-5 w-5 text-slate-400" />
+                </button>
+              </Link>
+              <Link href="/settings">
+                <button className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
+                  {profile?.full_name?.charAt(0) || "U"}
+                </button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="px-4 py-6 space-y-6 max-w-lg mx-auto">
+        {/* Progress Card */}
+        <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 rounded-3xl p-5 border border-slate-700/50">
+          <div className="flex items-center gap-5">
+            {/* Circular Progress */}
+            <div className="relative w-20 h-20 flex-shrink-0">
+              <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                <circle
+                  cx="40"
+                  cy="40"
+                  r="34"
+                  stroke="#334155"
+                  strokeWidth="6"
+                  fill="none"
+                />
+                <circle
+                  cx="40"
+                  cy="40"
+                  r="34"
+                  stroke="url(#progressGradient)"
+                  strokeWidth="6"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray={`${2 * Math.PI * 34}`}
+                  strokeDashoffset={`${2 * Math.PI * 34 * (1 - progressPercent / 100)}`}
+                  className="transition-all duration-700 ease-out"
+                />
+                <defs>
+                  <linearGradient
+                    id="progressGradient"
+                    x1="0%"
+                    y1="0%"
+                    x2="100%"
+                    y2="0%"
+                  >
+                    <stop offset="0%" stopColor="#8b5cf6" />
+                    <stop offset="100%" stopColor="#6366f1" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-xl font-bold text-white">
+                  {completedCount}
+                  <span className="text-slate-500 text-sm">
+                    /{totalWorkouts}
+                  </span>
+                </span>
               </div>
+            </div>
 
-              {workouts.length > 0 ? (
-                <div className="space-y-3">
-                  {workouts.map((workout: any, index: number) => {
-                    const status = getDayStatus(index, workout);
-                    const log = getWorkoutLog(index);
-                    const isNext =
-                      nextWorkout?.index === index && !status.isRestDay;
-
-                    // Rest day card
-                    if (status.isRestDay) {
-                      return (
-                        <Card
-                          key={index}
-                          className="border-0 shadow-sm bg-slate-50 dark:bg-slate-800/50 opacity-75"
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-slate-200 dark:bg-slate-700 text-muted-foreground">
-                                <span className="text-xl">😴</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h3 className="font-semibold text-muted-foreground">
-                                  {workout.day}
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                  Rest & Recovery
-                                </p>
-                              </div>
-                              <Badge
-                                variant="outline"
-                                className="text-muted-foreground"
-                              >
-                                Rest Day
-                              </Badge>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    }
-
-                    // Expired missed workout (past grace period) - auto-mark as missed
-                    if (status.isExpired) {
-                      return (
-                        <Card
-                          key={index}
-                          className="border-0 shadow-sm bg-slate-100 dark:bg-slate-800/30 opacity-60"
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-slate-300 dark:bg-slate-700 text-slate-500">
-                                <X className="h-6 w-6" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h3 className="font-semibold text-slate-500">
-                                    {workout.day}
-                                  </h3>
-                                  <Badge
-                                    variant="outline"
-                                    className="text-slate-500 border-slate-400 text-xs"
-                                  >
-                                    Missed
-                                  </Badge>
-                                </div>
-                                <p className="text-sm text-slate-500">
-                                  {workout.focus}
-                                </p>
-                              </div>
-                              <div className="text-right flex-shrink-0">
-                                <p className="text-sm text-slate-500">
-                                  {workout.duration_minutes} min
-                                </p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    }
-
-                    // Missed but within grace period - can still complete
-                    if (status.canStillComplete) {
-                      return (
-                        <Card
-                          key={index}
-                          className="border-0 shadow-md transition-all cursor-pointer hover:shadow-lg bg-orange-50 dark:bg-orange-950/20 ring-1 ring-orange-300 dark:ring-orange-800"
-                          onClick={() => handleStartWorkout(index)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 bg-orange-500 text-white">
-                                <AlertTriangle className="h-6 w-6" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h3 className="font-semibold">
-                                    {workout.day}
-                                  </h3>
-                                  <Badge className="bg-orange-500 text-white text-xs">
-                                    Missed
-                                  </Badge>
-                                </div>
-                                <p className="text-sm text-muted-foreground">
-                                  {workout.focus}
-                                </p>
-                                <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
-                                  {status.daysDiff === 1
-                                    ? "Yesterday"
-                                    : `${status.daysDiff} days ago`}{" "}
-                                  — tap to complete now
-                                </p>
-                              </div>
-                              <div className="text-right flex-shrink-0">
-                                <p className="text-sm font-medium">
-                                  {workout.duration_minutes} min
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {workout.exercises?.length} exercises
-                                </p>
-                              </div>
-                              <ChevronRight className="h-5 w-5 text-orange-500" />
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    }
-
-                    // Regular workout day card (completed, skipped, next, or future)
-                    return (
-                      <Card
-                        key={index}
-                        className={`border-0 shadow-md transition-all cursor-pointer hover:shadow-lg ${
-                          status.completed
-                            ? "bg-emerald-50 dark:bg-emerald-950/30"
-                            : status.skipped
-                              ? "bg-amber-50 dark:bg-amber-950/30"
-                              : isNext
-                                ? "bg-primary/5 ring-2 ring-primary"
-                                : "bg-white dark:bg-slate-800"
-                        }`}
-                        onClick={() => handleStartWorkout(index)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-center gap-4">
-                            {/* Status Circle */}
-                            <div
-                              className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                                status.completed
-                                  ? "bg-emerald-500 text-white"
-                                  : status.skipped
-                                    ? "bg-amber-500 text-white"
-                                    : isNext
-                                      ? "bg-primary text-white"
-                                      : "bg-slate-100 dark:bg-slate-700 text-muted-foreground"
-                              }`}
-                            >
-                              {status.completed ? (
-                                <CheckCircle2 className="h-6 w-6" />
-                              ) : status.skipped ? (
-                                <SkipForward className="h-6 w-6" />
-                              ) : (
-                                <Dumbbell className="h-5 w-5" />
-                              )}
-                            </div>
-
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-semibold">{workout.day}</h3>
-                                {status.isToday &&
-                                  !status.completed &&
-                                  !status.skipped && (
-                                    <Badge className="bg-blue-500 text-white text-xs">
-                                      Today
-                                    </Badge>
-                                  )}
-                                {isNext &&
-                                  !status.completed &&
-                                  !status.skipped &&
-                                  !status.isToday && (
-                                    <Badge className="bg-primary text-white text-xs">
-                                      Next
-                                    </Badge>
-                                  )}
-                                {status.skipped && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-amber-600 border-amber-600 text-xs"
-                                  >
-                                    Skipped
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-sm text-muted-foreground">
-                                {workout.focus}
-                              </p>
-                              {status.completed && log && (
-                                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                                  Completed in{" "}
-                                  {Math.round(log.duration_seconds / 60)} min
-                                </p>
-                              )}
-                              {status.skipped && (
-                                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                                  Skipped this week
-                                </p>
-                              )}
-                            </div>
-
-                            {/* Meta */}
-                            <div className="text-right flex-shrink-0">
-                              <p className="text-sm font-medium">
-                                {workout.duration_minutes} min
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {workout.exercises?.length} exercises
-                              </p>
-                            </div>
-
-                            {/* Preview button */}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="flex-shrink-0 h-8 w-8"
-                              onClick={(e) =>
-                                handlePreviewWorkout(workout, index, e)
-                              }
-                              title="Preview workout"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-
-                            <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              ) : (
-                <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
-                  <CardContent className="py-12 text-center">
-                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                      <Dumbbell className="h-8 w-8 text-primary" />
-                    </div>
-                    <h3 className="text-lg font-semibold mb-2">
-                      No Workout Plan Yet
-                    </h3>
-                    <p className="text-muted-foreground mb-4">
-                      Complete the onboarding to get your personalized plan
-                    </p>
-                    <Link href="/onboarding">
-                      <Button>Create My Plan</Button>
-                    </Link>
-                  </CardContent>
-                </Card>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-white font-semibold text-lg">
+                {isWeekComplete
+                  ? "Week Complete! 🎉"
+                  : `${totalWorkouts - completedCount} workouts left`}
+              </h2>
+              <p className="text-slate-400 text-sm mt-0.5">
+                {totalMinutes > 0
+                  ? `${totalMinutes} minutes this week`
+                  : "Let's get moving!"}
+              </p>
+              {isWeekComplete && (
+                <button
+                  onClick={() => setShowNextWeekDialog(true)}
+                  className="mt-3 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-xl transition-colors inline-flex items-center gap-2"
+                >
+                  <Zap className="h-4 w-4" />
+                  Next Week
+                </button>
               )}
             </div>
           </div>
+        </div>
 
-          {/* Sidebar - Right column */}
-          <div className="space-y-6">
-            {/* Progress Card */}
-            <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
-              <CardContent className="p-6">
-                <h3 className="font-semibold mb-4 flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-primary" />
-                  Weekly Progress
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-muted-foreground">Completion</span>
-                      <span className="font-medium">
-                        {Math.round(progressPercentage)}%
-                      </span>
-                    </div>
-                    <Progress value={progressPercentage} className="h-3" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 pt-2">
-                    <div className="text-center p-3 bg-muted/50 rounded-lg">
-                      <p className="text-2xl font-bold text-primary">
-                        {completedWorkouts}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Workouts</p>
-                    </div>
-                    <div className="text-center p-3 bg-muted/50 rounded-lg">
-                      <p className="text-2xl font-bold text-orange-500">
-                        {totalTimeSpent}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Minutes</p>
-                    </div>
-                  </div>
+        {/* Next Workout Card */}
+        {nextWorkout && !isWeekComplete && (
+          <div
+            className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600 via-violet-600 to-indigo-700 p-6 cursor-pointer active:scale-[0.98] transition-transform"
+            onClick={() => handleStartWorkout(nextWorkout.index)}
+          >
+            {/* Background decoration */}
+            <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-400/20 rounded-full blur-2xl translate-y-1/2 -translate-x-1/4" />
+
+            <div className="relative">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-violet-200 text-sm font-medium mb-1">
+                    Up Next
+                  </p>
+                  <h3 className="text-white text-xl font-bold mb-1">
+                    {nextWorkout.workout.focus}
+                  </h3>
+                  <p className="text-violet-200/80 text-sm">
+                    {nextWorkout.workout.day}
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Quick Stats */}
-            <Card className="border-0 shadow-lg bg-gradient-to-br from-orange-500 to-red-500 text-white">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Flame className="h-6 w-6" />
-                  <span className="font-semibold">Current Streak</span>
+                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <Play className="h-7 w-7 text-white ml-0.5" />
                 </div>
-                <p className="text-5xl font-bold mb-1">{completedWorkouts}</p>
-                <p className="text-white/80 text-sm">workouts this week</p>
-              </CardContent>
-            </Card>
+              </div>
 
-            {/* Quick Actions */}
-            <div className="space-y-3">
-              <Link href="/chat" className="block">
-                <Card className="border-0 shadow-md bg-white dark:bg-slate-800 hover:shadow-lg transition-shadow">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
-                      <MessageSquare className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">AI Coach</p>
-                      <p className="text-xs text-muted-foreground">
-                        Get advice & modify plan
-                      </p>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </CardContent>
-                </Card>
-              </Link>
-
-              <Link href="/nutrition" className="block">
-                <Card className="border-0 shadow-md bg-white dark:bg-slate-800 hover:shadow-lg transition-shadow">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                      <Utensils className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">Nutrition</p>
-                      <p className="text-xs text-muted-foreground">
-                        Meal plans & macros
-                      </p>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </CardContent>
-                </Card>
-              </Link>
-
-              <Link href="/progress" className="block">
-                <Card className="border-0 shadow-md bg-white dark:bg-slate-800 hover:shadow-lg transition-shadow">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                      <BarChart3 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">Progress</p>
-                      <p className="text-xs text-muted-foreground">
-                        Track weight & stats
-                      </p>
-                    </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </CardContent>
-                </Card>
-              </Link>
+              <div className="flex items-center gap-4 mt-5 text-sm text-violet-100">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 opacity-70" />
+                  {nextWorkout.workout.duration_minutes} min
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Dumbbell className="h-4 w-4 opacity-70" />
+                  {nextWorkout.workout.exercises?.length || 0} exercises
+                </span>
+                <button
+                  className="ml-auto flex items-center gap-1.5 text-white/80 hover:text-white transition-colors"
+                  onClick={(e) =>
+                    handlePreviewWorkout(
+                      nextWorkout.workout,
+                      nextWorkout.index,
+                      e,
+                    )
+                  }
+                >
+                  <Eye className="h-4 w-4" />
+                  Preview
+                </button>
+              </div>
             </div>
+          </div>
+        )}
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-slate-800/60 rounded-2xl p-4 border border-slate-700/40">
+            <Flame className="h-5 w-5 text-orange-400 mb-2" />
+            <p className="text-2xl font-bold text-white">{completedCount}</p>
+            <p className="text-xs text-slate-500 mt-0.5">Workouts</p>
+          </div>
+          <div className="bg-slate-800/60 rounded-2xl p-4 border border-slate-700/40">
+            <Clock className="h-5 w-5 text-emerald-400 mb-2" />
+            <p className="text-2xl font-bold text-white">{totalMinutes}</p>
+            <p className="text-xs text-slate-500 mt-0.5">Minutes</p>
+          </div>
+          <div className="bg-slate-800/60 rounded-2xl p-4 border border-slate-700/40">
+            <Target className="h-5 w-5 text-violet-400 mb-2" />
+            <p className="text-2xl font-bold text-white">
+              {Math.round(progressPercent)}%
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">Complete</p>
           </div>
         </div>
 
-        {/* Next Week Generation Dialog */}
-        <Dialog open={showNextWeekDialog} onOpenChange={setShowNextWeekDialog}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
-                Generate Week {(plan?.week_number || 1) + 1}
-              </DialogTitle>
-              <DialogDescription>
-                Your AI coach will create a progressive workout plan based on
-                your performance.
-              </DialogDescription>
-            </DialogHeader>
+        {/* Weekly Schedule */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">This Week</h2>
+            {completedCount > 0 && !isWeekComplete && (
+              <button
+                onClick={() => setShowCheckinModal(true)}
+                className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1.5"
+              >
+                <BarChart3 className="h-4 w-4" />
+                Check-in
+              </button>
+            )}
+          </div>
 
-            <div className="space-y-4 py-4">
-              {/* Stats summary */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-primary">
-                    {completedWorkouts}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Workouts Done</p>
+          <div className="space-y-2">
+            {workouts.map((workout: any, index: number) => {
+              const status = getDayStatus(index, workout);
+              const log = getWorkoutLog(index);
+              const isNext = nextWorkout?.index === index && !status.isRestDay;
+
+              // Rest Day
+              if (status.isRestDay) {
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-800/30 border border-slate-800/50"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-slate-800 flex items-center justify-center text-lg">
+                      😴
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-500">
+                        {workout.day}
+                      </p>
+                      <p className="text-sm text-slate-600">Rest Day</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Expired (missed past grace period)
+              if (status.isExpired) {
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-800/20 opacity-50"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-slate-800 flex items-center justify-center">
+                      <X className="h-5 w-5 text-slate-600" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-600">
+                        {workout.day}
+                      </p>
+                      <p className="text-sm text-slate-700">{workout.focus}</p>
+                    </div>
+                    <span className="text-xs text-slate-600 bg-slate-800/50 px-2 py-1 rounded-lg">
+                      Missed
+                    </span>
+                  </div>
+                );
+              }
+
+              // Missed but can still complete
+              if (status.canStillComplete) {
+                return (
+                  <div
+                    key={index}
+                    onClick={() => handleStartWorkout(index)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-orange-500/10 border border-orange-500/30 cursor-pointer hover:bg-orange-500/15 transition-colors"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-orange-500 flex items-center justify-center">
+                      <AlertTriangle className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-white">{workout.day}</p>
+                        <span className="text-xs text-orange-400 bg-orange-500/20 px-1.5 py-0.5 rounded">
+                          {status.daysDiff === 1
+                            ? "Yesterday"
+                            : `${status.daysDiff}d ago`}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-400">{workout.focus}</p>
+                    </div>
+                    <ChevronRight className="h-5 w-5 text-orange-400" />
+                  </div>
+                );
+              }
+
+              // Completed
+              if (status.completed) {
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-emerald-500 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-white">{workout.day}</p>
+                      <p className="text-sm text-slate-400">{workout.focus}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-emerald-400">
+                        {log
+                          ? `${Math.round(log.duration_seconds / 60)}m`
+                          : "✓"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Skipped
+              if (status.skipped) {
+                return (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/30"
+                  >
+                    <div className="w-11 h-11 rounded-xl bg-amber-500 flex items-center justify-center">
+                      <SkipForward className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-white">{workout.day}</p>
+                      <p className="text-sm text-slate-400">{workout.focus}</p>
+                    </div>
+                    <span className="text-xs text-amber-400 bg-amber-500/20 px-2 py-1 rounded-lg">
+                      Skipped
+                    </span>
+                  </div>
+                );
+              }
+
+              // Today / Next / Future
+              return (
+                <div
+                  key={index}
+                  onClick={() => handleStartWorkout(index)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer transition-all ${
+                    isNext
+                      ? "bg-violet-500/10 border border-violet-500/40 hover:bg-violet-500/15"
+                      : status.isToday
+                        ? "bg-blue-500/10 border border-blue-500/40 hover:bg-blue-500/15"
+                        : "bg-slate-800/50 border border-slate-700/40 hover:bg-slate-800/70"
+                  }`}
+                >
+                  <div
+                    className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+                      isNext
+                        ? "bg-violet-500"
+                        : status.isToday
+                          ? "bg-blue-500"
+                          : "bg-slate-700"
+                    }`}
+                  >
+                    <Dumbbell className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-white">{workout.day}</p>
+                      {status.isToday && (
+                        <span className="text-xs text-blue-400 bg-blue-500/20 px-1.5 py-0.5 rounded">
+                          Today
+                        </span>
+                      )}
+                      {isNext && !status.isToday && (
+                        <span className="text-xs text-violet-400 bg-violet-500/20 px-1.5 py-0.5 rounded">
+                          Next
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-400">{workout.focus}</p>
+                  </div>
+                  <div className="text-right mr-1">
+                    <p className="text-sm text-slate-400">
+                      {workout.duration_minutes}m
+                    </p>
+                  </div>
+                  <ChevronRight
+                    className={`h-5 w-5 ${isNext ? "text-violet-400" : "text-slate-600"}`}
+                  />
                 </div>
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-orange-500">
-                    {totalTimeSpent}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Minutes Trained
-                  </p>
-                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-2 gap-3 pt-2">
+          <Link href="/nutrition">
+            <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/40 hover:bg-slate-800/70 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center mb-3">
+                <Utensils className="h-5 w-5 text-orange-400" />
               </div>
+              <p className="font-medium text-white">Nutrition</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Meal plans & macros
+              </p>
+            </div>
+          </Link>
+          <Link href="/progress">
+            <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/40 hover:bg-slate-800/70 transition-colors">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center mb-3">
+                <TrendingUp className="h-5 w-5 text-emerald-400" />
+              </div>
+              <p className="font-medium text-white">Progress</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Track your results
+              </p>
+            </div>
+          </Link>
+        </div>
+      </main>
 
-              {/* Feedback input */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  How was this week? (optional)
-                </label>
-                <Textarea
-                  placeholder="e.g., 'Felt great, ready for more challenge' or 'Struggled with upper body exercises' or 'Need more rest days'"
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Your feedback helps the AI adjust next week's difficulty and
-                  focus.
+      {/* Next Week Dialog */}
+      <Dialog open={showNextWeekDialog} onOpenChange={setShowNextWeekDialog}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <Zap className="h-5 w-5 text-violet-400" />
+              Generate Week {(plan?.week_number || 1) + 1}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Ready for the next challenge? We'll create your plan based on this
+              week's progress.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-center p-4 bg-slate-800/50 rounded-xl">
+                <p className="text-2xl font-bold text-white">
+                  {completedCount}
                 </p>
+                <p className="text-xs text-slate-500">Completed</p>
+              </div>
+              <div className="text-center p-4 bg-slate-800/50 rounded-xl">
+                <p className="text-2xl font-bold text-white">{totalMinutes}m</p>
+                <p className="text-xs text-slate-500">Trained</p>
               </div>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                variant="outline"
-                onClick={() => setShowNextWeekDialog(false)}
-                disabled={generatingNextWeek}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleGenerateNextWeek}
-                disabled={generatingNextWeek}
-              >
-                {generatingNextWeek ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <ArrowRight className="h-4 w-4 mr-2" />
-                    Generate Week {(plan?.week_number || 1) + 1}
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-300">
+                Feedback (optional)
+              </label>
+              <Textarea
+                placeholder="How did this week feel? Any adjustments needed?"
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                rows={3}
+                className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 resize-none"
+              />
+            </div>
+          </div>
 
-        {/* Workout Preview Dialog */}
-        <Dialog
-          open={previewWorkout !== null}
-          onOpenChange={(open) => !open && closePreview()}
-        >
-          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Dumbbell className="h-5 w-5 text-primary" />
-                {previewWorkout?.day} - {previewWorkout?.focus}
-              </DialogTitle>
-              <DialogDescription className="flex items-center gap-4">
-                <span className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  {previewWorkout?.duration_minutes} minutes
-                </span>
-                <span className="flex items-center gap-1">
-                  <Target className="h-4 w-4" />
-                  {previewWorkout?.exercises?.length} exercises
-                </span>
-              </DialogDescription>
-            </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowNextWeekDialog(false)}
+              disabled={generatingNextWeek}
+              className="border-slate-700 text-slate-300 hover:bg-slate-800"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGenerateNextWeek}
+              disabled={generatingNextWeek}
+              className="bg-violet-600 hover:bg-violet-500 text-white"
+            >
+              {generatingNextWeek ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <ArrowRight className="h-4 w-4 mr-2" />
+                  Generate
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            <div className="space-y-4 py-4">
-              {/* Exercise List */}
-              {previewWorkout?.exercises?.map((exercise: any, idx: number) => (
-                <div key={idx} className="border rounded-lg p-4 bg-muted/30">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold">{exercise.name}</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {exercise.sets} sets × {exercise.reps} reps
-                        </p>
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="text-xs">
-                      {exercise.rest_seconds}s rest
-                    </Badge>
-                  </div>
-                  {exercise.notes && (
-                    <p className="text-sm text-muted-foreground mt-2 pl-11">
-                      💡 {exercise.notes}
-                    </p>
+      {/* Preview Dialog */}
+      <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-800 max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              {previewWorkout?.day} — {previewWorkout?.focus}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400 flex items-center gap-3">
+              <span className="flex items-center gap-1">
+                <Clock className="h-4 w-4" />
+                {previewWorkout?.duration_minutes}m
+              </span>
+              <span className="flex items-center gap-1">
+                <Dumbbell className="h-4 w-4" />
+                {previewWorkout?.exercises?.length} exercises
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-4">
+            {previewWorkout?.exercises?.map((ex: any, i: number) => (
+              <div
+                key={i}
+                className="flex items-start gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50"
+              >
+                <div className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center text-xs font-bold text-violet-400 flex-shrink-0 mt-0.5">
+                  {i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-white text-sm">{ex.name}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {ex.sets} × {ex.reps} • {ex.rest_seconds}s rest
+                  </p>
+                  {ex.notes && (
+                    <p className="text-xs text-slate-500 mt-1">💡 {ex.notes}</p>
                   )}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={closePreview}>
-                Close
-              </Button>
-              <Button
-                onClick={() => {
-                  closePreview();
-                  if (previewIndex !== null) handleStartWorkout(previewIndex);
-                }}
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Start Workout
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </main>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowPreviewDialog(false)}
+              className="border-slate-700 text-slate-300 hover:bg-slate-800"
+            >
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                setShowPreviewDialog(false);
+                if (previewIndex !== null) handleStartWorkout(previewIndex);
+              }}
+              className="bg-violet-600 hover:bg-violet-500 text-white"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Start
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Weekly Check-in Modal */}
       {userId && (
@@ -1035,11 +869,7 @@ export default function DashboardPage() {
           skippedWorkouts={
             workoutLogs.filter((log) => log.status === "skipped").length
           }
-          totalWorkouts={
-            plan?.exercises?.workouts?.filter(
-              (w: any) => !w.isRestDay && w.exercises?.length > 0,
-            ).length || 0
-          }
+          totalWorkouts={totalWorkouts}
           currentDays={profile?.available_days || []}
           currentGoal={profile?.fitness_goal || ""}
           onCheckinComplete={handleCheckinComplete}
