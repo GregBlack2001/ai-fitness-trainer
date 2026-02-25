@@ -36,6 +36,7 @@ import {
 import Link from "next/link";
 import { logEventClient } from "@/lib/events";
 import { WeeklyCheckinModal } from "@/components/weekly-checkin-modal";
+import { BottomNav } from "@/components/bottom-nav";
 
 type WorkoutLog = {
   id: string;
@@ -121,7 +122,7 @@ export default function DashboardPage() {
       }
 
       setLoading(false);
-      logEventClient("dashboard_viewed", {});
+      logEventClient("plan_viewed", {});
     };
 
     loadData();
@@ -875,6 +876,9 @@ export default function DashboardPage() {
           onCheckinComplete={handleCheckinComplete}
         />
       )}
+
+      {/* Bottom Navigation */}
+      <BottomNav />
     </div>
   );
 }
