@@ -92,10 +92,6 @@ export default function DashboardPage() {
 
       if (profileData) {
         setProfile(profileData);
-        if (!profileData.onboarding_completed) {
-          router.push("/onboarding");
-          return;
-        }
       }
 
       // Fetch active workout plan
@@ -106,19 +102,23 @@ export default function DashboardPage() {
         .eq("is_active", true)
         .single();
 
-      if (planData) {
-        setPlan(planData);
+      // If no plan exists, go to onboarding
+      if (!planData) {
+        router.push("/onboarding");
+        return;
+      }
 
-        // Fetch workout logs for this plan
-        const { data: logsData } = await supabase
-          .from("workout_logs")
-          .select("*")
-          .eq("plan_id", planData.id)
-          .order("completed_at", { ascending: true });
+      setPlan(planData);
 
-        if (logsData) {
-          setWorkoutLogs(logsData);
-        }
+      // Fetch workout logs for this plan
+      const { data: logsData } = await supabase
+        .from("workout_logs")
+        .select("*")
+        .eq("plan_id", planData.id)
+        .order("completed_at", { ascending: true });
+
+      if (logsData) {
+        setWorkoutLogs(logsData);
       }
 
       setLoading(false);
