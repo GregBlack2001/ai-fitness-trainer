@@ -5,8 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import {
   Loader2,
   Send,
@@ -19,6 +17,8 @@ import {
   VolumeX,
   ArrowRight,
   AlertCircle,
+  Bot,
+  User,
 } from "lucide-react";
 import { logEventClient } from "@/lib/events";
 
@@ -41,7 +41,7 @@ export default function OnboardingPage() {
 
   // Voice states
   const [isListening, setIsListening] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
 
@@ -50,17 +50,15 @@ export default function OnboardingPage() {
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
 
-  // Progress stages
   const progressStages = [
-    "Getting to know you",
-    "Understanding your goals",
-    "Checking your schedule",
-    "Equipment & limitations",
-    "Nutrition preferences",
-    "Creating your plan",
+    "Getting started",
+    "Your goals",
+    "Your schedule",
+    "Equipment",
+    "Nutrition",
+    "Creating plan",
   ];
 
-  // Check for speech support on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const SpeechRecognition =
@@ -76,7 +74,6 @@ export default function OnboardingPage() {
 
         recognitionRef.current.onresult = (event: any) => {
           let interimTranscript = "";
-
           for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             if (event.results[i].isFinal) {
@@ -85,33 +82,18 @@ export default function OnboardingPage() {
               interimTranscript = transcript;
             }
           }
-
-          // Show full transcript + current interim
           setInput((fullTranscript + interimTranscript).trim());
         };
 
         recognitionRef.current.onend = () => {
-          console.log("Speech recognition ended");
           setIsListening(false);
-          fullTranscript = ""; // Reset for next session
+          fullTranscript = "";
         };
 
         recognitionRef.current.onerror = (event: any) => {
           console.error("Speech recognition error:", event.error);
           setIsListening(false);
-          fullTranscript = ""; // Reset on error
-
-          if (event.error === "not-allowed") {
-            alert(
-              "Microphone access denied. Please allow microphone access in your browser settings and refresh the page.",
-            );
-          } else if (event.error === "no-speech") {
-            // User didn't say anything, this is okay
-          } else if (event.error === "network") {
-            alert(
-              "Network error. Speech recognition requires an internet connection.",
-            );
-          }
+          fullTranscript = "";
         };
 
         setSpeechSupported(true);
@@ -123,16 +105,11 @@ export default function OnboardingPage() {
     }
 
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-      if (synthRef.current) {
-        synthRef.current.cancel();
-      }
+      if (recognitionRef.current) recognitionRef.current.stop();
+      if (synthRef.current) synthRef.current.cancel();
     };
   }, []);
 
-  // Scroll to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -141,7 +118,6 @@ export default function OnboardingPage() {
     scrollToBottom();
   }, [messages]);
 
-  // Get user and start conversation
   useEffect(() => {
     const init = async () => {
       const {
@@ -152,7 +128,6 @@ export default function OnboardingPage() {
         return;
       }
 
-      // Check if user already has a plan
       const { data: existingPlans } = await supabase
         .from("workout_plans")
         .select("id")
@@ -167,114 +142,40 @@ export default function OnboardingPage() {
 
       setUserId(user.id);
 
-      setUserId(user.id);
+      const greeting = `Hey! 👋 I'm your AI fitness coach. Let's create a personalized workout and nutrition plan for you.
 
-      // Start the conversation (no name sent to AI)
-      const greeting = `Hey there! 👋 I'm your AI fitness coach, and I'm excited to create a personalized workout and nutrition plan just for you!
+I'll ask you a few quick questions about your goals, schedule, and preferences.
 
-I'll ask you a few questions to understand your goals, schedule, and preferences. You can type your responses or tap the 🎤 microphone to speak to me!
-
-Let's start simple: **What's your main fitness goal?** For example:
-• Lose weight / Get leaner
-• Build muscle / Get stronger
-• Improve overall fitness
-• Train for a specific sport or event`;
+**What's your main fitness goal?**
+• Lose weight
+• Build muscle
+• Get stronger
+• Improve overall fitness`;
 
       setMessages([{ role: "assistant", content: greeting }]);
       setInitialLoading(false);
-
-      // Log onboarding started event
       logEventClient("onboarding_started");
-
-      // Speak the greeting
-      setTimeout(() => {
-        if (voiceEnabled) speakText(greeting);
-      }, 500);
     };
 
     init();
   }, [supabase, router]);
 
-  // Toggle voice recognition
-  const toggleListening = async () => {
-    if (!recognitionRef.current) return;
-
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      // Request microphone permission explicitly
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        // Stop the stream immediately - we just needed permission
-        stream.getTracks().forEach((track) => track.stop());
-
-        setInput("");
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch (err: any) {
-        console.error("Microphone permission error:", err);
-        if (
-          err.name === "NotAllowedError" ||
-          err.name === "PermissionDeniedError"
-        ) {
-          alert(
-            "Microphone access is required for voice input. Please allow microphone access in your browser settings and try again.",
-          );
-        } else if (err.name === "NotFoundError") {
-          alert(
-            "No microphone found. Please connect a microphone and try again.",
-          );
-        } else {
-          alert("Could not access microphone: " + err.message);
-        }
-      }
-    }
-  };
-
-  // Speak text using TTS
   const speakText = (text: string) => {
-    if (!synthRef.current || !voiceEnabled || !text) return;
-
+    if (!synthRef.current || !voiceEnabled) return;
     synthRef.current.cancel();
-
-    const cleanText = text
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/•/g, "")
-      .replace(/\n+/g, ". ")
-      .replace(/👋|💪|🎯|✅|🎉/g, "")
-      .trim();
-
-    if (!cleanText) return;
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    const voices = synthRef.current.getVoices();
-    const preferredVoice = voices.find(
-      (v) =>
-        v.name.includes("Google") ||
-        v.name.includes("Natural") ||
-        v.name.includes("Samantha") ||
-        v.lang.startsWith("en"),
-    );
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    }
-
+    const plainText = text
+      .replace(/\*\*/g, "")
+      .replace(/\*/g, "")
+      .replace(/•/g, "-");
+    const utterance = new SpeechSynthesisUtterance(plainText);
+    utterance.rate = 1;
+    utterance.pitch = 1;
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
-
     synthRef.current.speak(utterance);
   };
 
-  // Stop speaking
   const stopSpeaking = () => {
     if (synthRef.current) {
       synthRef.current.cancel();
@@ -282,75 +183,82 @@ Let's start simple: **What's your main fitness goal?** For example:
     }
   };
 
-  const handleSend = async (messageText?: string) => {
-    const textToSend = messageText || input.trim();
-    if (!textToSend || isLoading || !userId) return;
+  const toggleListening = () => {
+    if (!recognitionRef.current) return;
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      setInput("");
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading || !userId) return;
+
+    const userMessage = input.trim();
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setIsLoading(true);
 
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
     }
 
-    const userMessage: Message = { role: "user", content: textToSend };
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-
     try {
       const response = await fetch("/api/chat/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messages, userMessage].map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          message: userMessage,
+          userId,
+          conversationHistory: messages,
         }),
       });
 
       const data = await response.json();
 
       if (data.error) {
-        const errorMsg = "Sorry, I encountered an error. Please try again.";
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: errorMsg },
+          {
+            role: "assistant",
+            content: "Sorry, I encountered an error. Please try again.",
+          },
         ]);
-        if (voiceEnabled) speakText(errorMsg);
       } else {
         setMessages((prev) => [
           ...prev,
           { role: "assistant", content: data.message },
         ]);
 
-        // Update progress based on data collection
         if (data.profileUpdated) {
           setProgress((prev) => Math.min(prev + 15, 85));
         }
 
-        // Check if plan was created
         if (data.planCreated) {
           setPlanCreated(true);
           setProgress(100);
-
-          // Log completion events
           logEventClient("onboarding_completed");
           logEventClient("plan_generated", { source: "onboarding" });
         }
 
-        // Speak the response
         if (voiceEnabled && data.message) {
           speakText(data.message);
         }
       }
     } catch (error) {
       console.error("Onboarding error:", error);
-      const errorMsg = "Sorry, something went wrong. Please try again.";
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: errorMsg },
+        {
+          role: "assistant",
+          content: "Sorry, something went wrong. Please try again.",
+        },
       ]);
-      if (voiceEnabled) speakText(errorMsg);
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();
@@ -366,231 +274,232 @@ Let's start simple: **What's your main fitness goal?** For example:
 
   if (initialLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin mx-auto text-primary" />
-          <p className="mt-4 text-muted-foreground">Preparing your coach...</p>
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center mx-auto animate-pulse">
+            <Dumbbell className="h-8 w-8 text-white" />
+          </div>
+          <Loader2 className="h-5 w-5 animate-spin mx-auto mt-4 text-violet-400" />
+          <p className="mt-2 text-slate-400 text-sm">Preparing your coach...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-primary/10">
+    <div className="min-h-screen bg-slate-950 flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-                <Dumbbell className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="font-semibold">Create Your Plan</h1>
-                <p className="text-xs text-muted-foreground">
-                  {isSpeaking
-                    ? "Speaking..."
-                    : progressStages[Math.floor(progress / 20)] ||
-                      "Getting started"}
-                </p>
-              </div>
+      <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-lg border-b border-slate-800/50 px-4 py-3">
+        <div className="flex items-center justify-between max-w-lg mx-auto">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
+              <Dumbbell className="h-5 w-5 text-white" />
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
+            <div>
+              <h1 className="font-semibold text-white text-sm">
+                Create Your Plan
+              </h1>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                {progressStages[Math.floor(progress / 20)] || "Getting started"}
+              </p>
+            </div>
+          </div>
+
+          {speechSupported && (
+            <button
               onClick={() => {
                 if (isSpeaking) stopSpeaking();
                 setVoiceEnabled(!voiceEnabled);
               }}
-              title={voiceEnabled ? "Disable voice" : "Enable voice"}
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                voiceEnabled
+                  ? "bg-violet-600 text-white"
+                  : "bg-slate-800 text-slate-400"
+              }`}
             >
               {voiceEnabled ? (
-                <Volume2 className="h-5 w-5 text-primary" />
+                <Volume2 className="h-4 w-4" />
               ) : (
-                <VolumeX className="h-5 w-5 text-muted-foreground" />
+                <VolumeX className="h-4 w-4" />
               )}
-            </Button>
-          </div>
+            </button>
+          )}
+        </div>
 
-          {/* Progress bar */}
-          <div className="mt-3">
-            <Progress value={progress} className="h-2" />
-            <p className="text-xs text-muted-foreground mt-1 text-right">
-              {progress}% complete
-            </p>
+        {/* Progress */}
+        <div className="max-w-lg mx-auto mt-3">
+          <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 max-w-2xl">
-        <div className="flex flex-col h-[calc(100vh-200px)]">
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-            {/* Disclaimer Notice */}
-            {messages.length === 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
-                <div className="flex gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div className="text-xs text-amber-800 dark:text-amber-200">
-                    <p className="font-medium mb-1">Important Notice</p>
-                    <p>
-                      This app provides general fitness guidance only, not
-                      medical advice. Please consult a healthcare provider
-                      before starting any new exercise or nutrition programme.
-                      AI-generated recommendations may not be suitable for
-                      everyone.
-                    </p>
-                  </div>
-                </div>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="max-w-lg mx-auto space-y-4">
+          {/* Disclaimer */}
+          {messages.length <= 1 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-4">
+              <div className="flex gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-200/80">
+                  This app provides general fitness guidance only. Consult a
+                  healthcare provider before starting any new exercise program.
+                </p>
               </div>
-            )}
+            </div>
+          )}
 
-            {messages.map((message, index) => (
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              {message.role === "assistant" && (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                  <Bot className="h-4 w-4 text-white" />
+                </div>
+              )}
+
               <div
-                key={index}
-                className={`flex ${
-                  message.role === "user" ? "justify-end" : "justify-start"
+                className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                  message.role === "user"
+                    ? "bg-violet-600 text-white rounded-br-sm"
+                    : "bg-slate-800 text-slate-100 rounded-bl-sm"
                 }`}
               >
                 <div
-                  className={`max-w-[85%] rounded-2xl px-4 py-3 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-white dark:bg-slate-800 shadow-md rounded-bl-md"
-                  }`}
-                >
+                  className="text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{
+                    __html: (message.content || "")
+                      .replace(
+                        /\*\*(.*?)\*\*/g,
+                        "<strong class='font-semibold'>$1</strong>",
+                      )
+                      .replace(/\n/g, "<br/>")
+                      .replace(/•/g, "<span class='text-violet-400'>•</span>"),
+                  }}
+                />
+              </div>
+
+              {message.role === "user" && (
+                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
+                  <User className="h-4 w-4 text-slate-300" />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isLoading && (
+            <div className="flex gap-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
+                <Bot className="h-4 w-4 text-white" />
+              </div>
+              <div className="bg-slate-800 rounded-2xl rounded-bl-sm px-4 py-3">
+                <div className="flex gap-1">
                   <div
-                    className="text-sm whitespace-pre-wrap prose prose-sm dark:prose-invert max-w-none"
-                    dangerouslySetInnerHTML={{
-                      __html: (message.content || "")
-                        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-                        .replace(/\*(.*?)\*/g, "<em>$1</em>")
-                        .replace(/•/g, "<br/>•"),
-                    }}
+                    className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"
+                    style={{ animationDelay: "0ms" }}
                   />
-
-                  {/* Listen button for assistant messages */}
-                  {message.role === "assistant" && message.content && (
-                    <button
-                      onClick={() => speakText(message.content)}
-                      className="mt-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                    >
-                      <Volume2 className="h-3 w-3" />
-                      Listen
-                    </button>
-                  )}
+                  <div
+                    className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  />
+                  <div
+                    className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  />
                 </div>
               </div>
-            ))}
-
-            {/* Loading indicator */}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl rounded-bl-md px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm text-muted-foreground">
-                      {progress >= 85
-                        ? "Creating your personalized plan..."
-                        : "Thinking..."}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
+            </div>
+          )}
 
           {/* Plan Created Success */}
           {planCreated && (
-            <Card className="mb-4 border-0 shadow-lg bg-gradient-to-r from-green-500 to-emerald-500 text-white">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="h-8 w-8" />
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-xl font-bold mb-1">
-                      Your Plan is Ready! 🎉
-                    </h2>
-                    <p className="text-white/80 text-sm">
-                      I've created a personalized workout and nutrition plan
-                      based on our conversation.
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => router.push("/dashboard")}
-                  className="w-full mt-4 bg-white text-green-600 hover:bg-white/90 h-12 text-lg font-semibold"
-                >
-                  Go to Dashboard
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </CardContent>
-            </Card>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center">
+              <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center mx-auto mb-4">
+                <CheckCircle2 className="h-7 w-7 text-white" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">
+                Your Plan is Ready! 🎉
+              </h3>
+              <p className="text-slate-400 text-sm mb-4">
+                Your personalized workout and nutrition plan has been created.
+              </p>
+              <Button
+                onClick={() => router.push("/dashboard")}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white"
+              >
+                <Sparkles className="h-4 w-4 mr-2" />
+                View My Plan
+              </Button>
+            </div>
           )}
 
-          {/* Input Area */}
-          {!planCreated && (
-            <div className="sticky bottom-0 bg-gradient-to-t from-background via-background pt-4">
-              <div className="flex gap-2">
-                {/* Voice input button */}
-                {speechSupported && (
-                  <Button
-                    variant={isListening ? "destructive" : "outline"}
-                    size="lg"
-                    className={`h-12 px-4 ${isListening ? "animate-pulse" : ""}`}
-                    onClick={toggleListening}
-                    title={isListening ? "Stop listening" : "Start voice input"}
-                  >
-                    {isListening ? (
-                      <MicOff className="h-5 w-5" />
-                    ) : (
-                      <Mic className="h-5 w-5" />
-                    )}
-                  </Button>
-                )}
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
 
+      {/* Input Area */}
+      {!planCreated && (
+        <div className="sticky bottom-0 bg-slate-950 border-t border-slate-800/50 px-4 py-4">
+          <div className="max-w-lg mx-auto">
+            <div className="flex items-center gap-2">
+              {speechSupported && (
+                <button
+                  onClick={toggleListening}
+                  disabled={isLoading}
+                  className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                    isListening
+                      ? "bg-red-500 text-white animate-pulse"
+                      : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                  }`}
+                >
+                  {isListening ? (
+                    <MicOff className="h-5 w-5" />
+                  ) : (
+                    <Mic className="h-5 w-5" />
+                  )}
+                </button>
+              )}
+
+              <div className="flex-1 relative">
                 <Input
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyPress}
+                  onKeyPress={handleKeyPress}
                   placeholder={
-                    isListening
-                      ? "Listening..."
-                      : "Type or speak your response..."
+                    isListening ? "Listening..." : "Type your answer..."
                   }
                   disabled={isLoading}
-                  className={`flex-1 h-12 text-base bg-white dark:bg-slate-800 ${
-                    isListening
-                      ? "border-red-500 bg-red-50 dark:bg-red-950/20"
-                      : ""
-                  }`}
+                  className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 pr-12 h-11 rounded-full"
                 />
-                <Button
-                  onClick={() => handleSend()}
-                  disabled={isLoading || !input.trim()}
-                  size="lg"
-                  className="h-12 px-6"
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || isLoading}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-violet-600 hover:bg-violet-500 disabled:bg-slate-700 disabled:text-slate-500 flex items-center justify-center text-white transition-colors"
                 >
                   {isLoading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Send className="h-5 w-5" />
+                    <Send className="h-4 w-4" />
                   )}
-                </Button>
+                </button>
               </div>
-              <p className="text-xs text-muted-foreground text-center mt-2">
-                {speechSupported
-                  ? "🎤 Tap microphone to speak • 🔊 Tap speaker in header to toggle voice"
-                  : "Answer the questions to create your personalized plan"}
-              </p>
             </div>
-          )}
+
+            {isListening && (
+              <p className="text-center text-xs text-red-400 mt-2 animate-pulse">
+                🎤 Listening... Tap mic to stop
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
