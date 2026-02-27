@@ -1,8 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/supabase/server";
 
-export async function POST(request: Request) {
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export async function POST(request: NextRequest) {
   console.log("=== DELETE ACCOUNT API CALLED ===");
 
   try {
@@ -105,4 +108,11 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+// GET handler for testing if route exists
+export async function GET() {
+  return NextResponse.json({
+    message: "Delete account endpoint is working. Use POST to delete.",
+  });
 }
