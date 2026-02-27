@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -57,7 +57,22 @@ const DAYS = [
   "Sunday",
 ];
 
-export default function DashboardPage() {
+// Loading fallback component
+function DashboardLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center animate-pulse">
+          <Dumbbell className="h-7 w-7 text-white" />
+        </div>
+        <Loader2 className="h-5 w-5 animate-spin text-violet-400" />
+      </div>
+    </div>
+  );
+}
+
+// Main dashboard content component
+function DashboardContent() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -900,5 +915,14 @@ export default function DashboardPage() {
 
       <BottomNav />
     </div>
+  );
+}
+
+// Default export with Suspense boundary
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<DashboardLoading />}>
+      <DashboardContent />
+    </Suspense>
   );
 }
