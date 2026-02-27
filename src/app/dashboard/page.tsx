@@ -197,30 +197,36 @@ function DashboardContent() {
   };
 
   // Helper to get the actual date for a day name in the current plan's week
+  // The "week" always starts on Monday, so workouts are scheduled for the
+  // upcoming Monday-Sunday period after plan creation
   const getDateForDay = (dayName: string): Date | null => {
     if (!plan?.created_at) return null;
 
     const planCreatedAt = new Date(plan.created_at);
     planCreatedAt.setHours(0, 0, 0, 0);
 
-    const planDayOfWeek = planCreatedAt.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    const targetDayIdx = DAYS.indexOf(dayName);
+    const targetDayIdx = DAYS.indexOf(dayName); // Monday=0, Sunday=6
 
-    // Convert DAYS index (Monday=0) to JS day (Monday=1)
-    const targetJsDay = targetDayIdx === 6 ? 0 : targetDayIdx + 1;
-    const planJsDay = planDayOfWeek;
+    // Find the next Monday on or after plan creation
+    const planDayOfWeek = planCreatedAt.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
 
-    // Calculate days from plan creation to target day
-    let daysFromPlanStart = targetJsDay - planJsDay;
+    // Convert JS day (0=Sun) to our day index (0=Mon)
+    // JS: Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
+    // Our: Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
+    const planDayIdx = planDayOfWeek === 0 ? 6 : planDayOfWeek - 1;
 
-    // If target day is on or before plan creation day in the week,
-    // the workout is for NEXT week (add 7 days)
-    // e.g., Plan created Friday, Friday workout = next Friday (7 days)
-    // e.g., Plan created Friday, Monday workout = next Monday (3 days)
-    // e.g., Plan created Friday, Saturday workout = tomorrow (1 day)
-    if (daysFromPlanStart <= 0) {
-      daysFromPlanStart += 7;
+    // Calculate days until the start of the "plan week" (next Monday)
+    // If plan created on Monday, week starts that Monday
+    // If plan created on Tuesday-Sunday, week starts next Monday
+    let daysUntilWeekStart = 0;
+    if (planDayIdx > 0) {
+      // Plan created Tue-Sun, so next Monday is (7 - planDayIdx) days away
+      daysUntilWeekStart = 7 - planDayIdx;
     }
+    // If planDayIdx === 0 (Monday), week starts today, daysUntilWeekStart = 0
+
+    // The target day is (daysUntilWeekStart + targetDayIdx) days from plan creation
+    const daysFromPlanStart = daysUntilWeekStart + targetDayIdx;
 
     const targetDate = new Date(planCreatedAt);
     targetDate.setDate(planCreatedAt.getDate() + daysFromPlanStart);
