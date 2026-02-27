@@ -651,7 +651,7 @@ function DashboardContent() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-white">{item.day}</p>
-                        {isToday && (
+                        {status.isToday && (
                           <span className="text-[10px] text-emerald-400 bg-emerald-500/20 px-1.5 py-0.5 rounded">
                             Today
                           </span>
