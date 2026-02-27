@@ -113,6 +113,6 @@ export async function POST(request: NextRequest) {
 // GET handler for testing if route exists
 export async function GET() {
   return NextResponse.json({
-    message: "Delete account endpoint is working. Use POST to delete.",
+    message: "Delete account endpoint is working. Use POST to DELETE.",
   });
 }
