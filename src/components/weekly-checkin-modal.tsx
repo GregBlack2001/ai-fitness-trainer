@@ -78,8 +78,8 @@ const RatingButton = ({
     onClick={onClick}
     className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
       selected
-        ? "bg-primary text-primary-foreground scale-110"
-        : "bg-muted hover:bg-muted/80"
+        ? "bg-violet-500 text-white scale-110"
+        : "bg-slate-700 text-slate-300 hover:bg-slate-600"
     }`}
   >
     {value}
@@ -202,38 +202,40 @@ export function WeeklyCheckinModal({
   if (submitted) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
               Week Complete!
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full mb-4">
-                <TrendingUp className="h-8 w-8 text-green-600 dark:text-green-400" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-500/20 rounded-full mb-4">
+                <TrendingUp className="h-8 w-8 text-emerald-400" />
               </div>
-              <h3 className="font-semibold text-lg">Your New Plan is Ready!</h3>
-              <p className="text-sm text-muted-foreground mt-1">
+              <h3 className="font-semibold text-lg text-white">
+                Your New Plan is Ready!
+              </h3>
+              <p className="text-sm text-slate-400 mt-1">
                 Based on your feedback, I've adapted your workout plan.
               </p>
             </div>
 
             {adaptations.length > 0 && (
-              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-                <h4 className="font-medium text-sm flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
+              <div className="bg-slate-800 rounded-xl p-4 space-y-2 border border-slate-700">
+                <h4 className="font-medium text-sm flex items-center gap-2 text-white">
+                  <Sparkles className="h-4 w-4 text-violet-400" />
                   Adaptations Made:
                 </h4>
                 <ul className="space-y-1">
                   {adaptations.map((adaptation, idx) => (
                     <li
                       key={idx}
-                      className="text-sm text-muted-foreground flex items-start gap-2"
+                      className="text-sm text-slate-300 flex items-start gap-2"
                     >
-                      <span className="text-primary">•</span>
+                      <span className="text-violet-400">•</span>
                       {adaptation}
                     </li>
                   ))}
@@ -241,7 +243,10 @@ export function WeeklyCheckinModal({
               </div>
             )}
 
-            <Button onClick={onClose} className="w-full">
+            <Button
+              onClick={onClose}
+              className="w-full bg-violet-600 hover:bg-violet-500 text-white"
+            >
               View New Plan
             </Button>
           </div>
@@ -252,22 +257,22 @@ export function WeeklyCheckinModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700 text-white">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 text-white">
             <Star className="h-5 w-5 text-yellow-500" />
             Weekly Check-in
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-slate-400">
             Step {step} of {totalSteps} — Help me adapt your next week's plan
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
           {/* Progress bar */}
-          <div className="w-full bg-muted rounded-full h-2">
+          <div className="w-full bg-slate-700 rounded-full h-2">
             <div
-              className="bg-primary h-2 rounded-full transition-all"
+              className="bg-violet-500 h-2 rounded-full transition-all"
               style={{ width: `${(step / totalSteps) * 100}%` }}
             />
           </div>
@@ -276,7 +281,7 @@ export function WeeklyCheckinModal({
           {step === 1 && (
             <div className="space-y-6">
               <div className="space-y-3">
-                <Label className="flex items-center gap-2">
+                <Label className="flex items-center gap-2 text-slate-200">
                   <Battery className="h-4 w-4 text-green-500" />
                   How was your energy this week?
                 </Label>
@@ -290,7 +295,7 @@ export function WeeklyCheckinModal({
                           setCheckinData({ ...checkinData, energyLevel: val })
                         }
                       />
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-slate-500">
                         {val === 1 ? "Low" : val === 5 ? "High" : ""}
                       </span>
                     </div>
@@ -299,7 +304,7 @@ export function WeeklyCheckinModal({
               </div>
 
               <div className="space-y-3">
-                <Label className="flex items-center gap-2">
+                <Label className="flex items-center gap-2 text-slate-200">
                   <Flame className="h-4 w-4 text-orange-500" />
                   How sore are you feeling?
                 </Label>
@@ -313,7 +318,7 @@ export function WeeklyCheckinModal({
                           setCheckinData({ ...checkinData, sorenessLevel: val })
                         }
                       />
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-slate-500">
                         {val === 1 ? "None" : val === 5 ? "Very" : ""}
                       </span>
                     </div>
@@ -327,8 +332,8 @@ export function WeeklyCheckinModal({
           {step === 2 && (
             <div className="space-y-6">
               <div className="space-y-3">
-                <Label className="flex items-center gap-2">
-                  <Dumbbell className="h-4 w-4 text-primary" />
+                <Label className="flex items-center gap-2 text-slate-200">
+                  <Dumbbell className="h-4 w-4 text-violet-400" />
                   How difficult were the workouts?
                 </Label>
                 <div className="flex justify-between">
@@ -344,7 +349,7 @@ export function WeeklyCheckinModal({
                           })
                         }
                       />
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-slate-500">
                         {val === 1 ? "Easy" : val === 5 ? "Hard" : ""}
                       </span>
                     </div>
@@ -353,7 +358,9 @@ export function WeeklyCheckinModal({
               </div>
 
               <div className="space-y-3">
-                <Label>For next week, I want my workouts to be:</Label>
+                <Label className="text-slate-200">
+                  For next week, I want my workouts to be:
+                </Label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -364,14 +371,14 @@ export function WeeklyCheckinModal({
                         wantEasier: false,
                       })
                     }
-                    className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
+                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
                       checkinData.wantHarder
-                        ? "border-primary bg-primary/10"
-                        : "border-muted hover:border-muted-foreground/30"
+                        ? "border-violet-500 bg-violet-500/20 text-white"
+                        : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600"
                     }`}
                   >
                     <ThumbsUp
-                      className={`h-6 w-6 ${checkinData.wantHarder ? "text-primary" : ""}`}
+                      className={`h-6 w-6 ${checkinData.wantHarder ? "text-violet-400" : "text-slate-400"}`}
                     />
                     <span className="text-sm font-medium">
                       More challenging
@@ -386,19 +393,19 @@ export function WeeklyCheckinModal({
                         wantHarder: false,
                       })
                     }
-                    className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
+                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${
                       checkinData.wantEasier
-                        ? "border-primary bg-primary/10"
-                        : "border-muted hover:border-muted-foreground/30"
+                        ? "border-violet-500 bg-violet-500/20 text-white"
+                        : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-600"
                     }`}
                   >
                     <ThumbsDown
-                      className={`h-6 w-6 ${checkinData.wantEasier ? "text-primary" : ""}`}
+                      className={`h-6 w-6 ${checkinData.wantEasier ? "text-violet-400" : "text-slate-400"}`}
                     />
                     <span className="text-sm font-medium">A bit easier</span>
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground text-center">
+                <p className="text-xs text-slate-500 text-center">
                   Or leave both unselected to keep similar intensity
                 </p>
               </div>
@@ -409,7 +416,9 @@ export function WeeklyCheckinModal({
           {step === 3 && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>Any exercises you struggled with?</Label>
+                <Label className="text-slate-200">
+                  Any exercises you struggled with?
+                </Label>
                 <Textarea
                   placeholder="e.g., Burpees were too intense, pull-ups too hard..."
                   value={checkinData.problemExercises}
@@ -419,13 +428,15 @@ export function WeeklyCheckinModal({
                       problemExercises: e.target.value,
                     })
                   }
-                  className="resize-none"
+                  className="resize-none bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                   rows={2}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Any exercises you really enjoyed?</Label>
+                <Label className="text-slate-200">
+                  Any exercises you really enjoyed?
+                </Label>
                 <Textarea
                   placeholder="e.g., Loved the dumbbell exercises, squats felt great..."
                   value={checkinData.favoriteExercises}
@@ -435,7 +446,7 @@ export function WeeklyCheckinModal({
                       favoriteExercises: e.target.value,
                     })
                   }
-                  className="resize-none"
+                  className="resize-none bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                   rows={2}
                 />
               </div>
@@ -448,7 +459,7 @@ export function WeeklyCheckinModal({
               {/* Change Workout Days */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
+                  <Label className="flex items-center gap-2 text-slate-200">
                     <Calendar className="h-4 w-4 text-blue-500" />
                     Change workout days?
                   </Label>
@@ -465,8 +476,8 @@ export function WeeklyCheckinModal({
                     }
                     className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
                       checkinData.changeWorkoutDays
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted hover:bg-muted/80"
+                        ? "bg-violet-500 text-white"
+                        : "bg-slate-700 text-slate-300 hover:bg-slate-600"
                     }`}
                   >
                     {checkinData.changeWorkoutDays ? "Yes" : "No"}
@@ -474,8 +485,8 @@ export function WeeklyCheckinModal({
                 </div>
 
                 {checkinData.changeWorkoutDays && (
-                  <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
-                    <p className="text-sm text-muted-foreground mb-2">
+                  <div className="space-y-2 p-3 bg-slate-800 rounded-xl border border-slate-700">
+                    <p className="text-sm text-slate-400 mb-2">
                       Select your workout days (
                       {checkinData.newWorkoutDays.length} selected):
                     </p>
@@ -500,8 +511,8 @@ export function WeeklyCheckinModal({
                             }}
                             className={`px-2 py-2 rounded-lg text-xs font-medium transition-all ${
                               isSelected
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted hover:bg-muted/80"
+                                ? "bg-violet-500 text-white"
+                                : "bg-slate-700 text-slate-300 hover:bg-slate-600"
                             }`}
                           >
                             {day.slice(0, 3)}
@@ -509,7 +520,7 @@ export function WeeklyCheckinModal({
                         );
                       })}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="text-xs text-slate-500 mt-2">
                       Current:{" "}
                       {currentDays.map((d) => d.slice(0, 3)).join(", ") ||
                         "None"}
@@ -521,7 +532,7 @@ export function WeeklyCheckinModal({
               {/* Change Fitness Goal */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="flex items-center gap-2">
+                  <Label className="flex items-center gap-2 text-slate-200">
                     <Target className="h-4 w-4 text-green-500" />
                     Change fitness goal?
                   </Label>
@@ -538,8 +549,8 @@ export function WeeklyCheckinModal({
                     }
                     className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${
                       checkinData.changeGoal
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted hover:bg-muted/80"
+                        ? "bg-violet-500 text-white"
+                        : "bg-slate-700 text-slate-300 hover:bg-slate-600"
                     }`}
                   >
                     {checkinData.changeGoal ? "Yes" : "No"}
@@ -547,8 +558,8 @@ export function WeeklyCheckinModal({
                 </div>
 
                 {checkinData.changeGoal && (
-                  <div className="space-y-2 p-3 bg-muted/50 rounded-lg">
-                    <p className="text-sm text-muted-foreground mb-2">
+                  <div className="space-y-2 p-3 bg-slate-800 rounded-xl border border-slate-700">
+                    <p className="text-sm text-slate-400 mb-2">
                       Select your new goal:
                     </p>
                     <div className="grid grid-cols-2 gap-2">
@@ -570,23 +581,23 @@ export function WeeklyCheckinModal({
                                 newGoal: goal.value,
                               })
                             }
-                            className={`p-3 rounded-lg text-left transition-all border-2 ${
+                            className={`p-3 rounded-xl text-left transition-all border-2 ${
                               checkinData.newGoal === goal.value
-                                ? "border-primary bg-primary/10"
-                                : "border-muted hover:border-muted-foreground/30"
+                                ? "border-violet-500 bg-violet-500/20"
+                                : "border-slate-700 bg-slate-800 hover:border-slate-600"
                             }`}
                           >
-                            <span className="text-sm font-medium block">
+                            <span className="text-sm font-medium block text-white">
                               {goal.label}
                             </span>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-slate-400">
                               {goal.description}
                             </span>
                           </button>
                         );
                       })}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="text-xs text-slate-500 mt-2">
                       Current: {currentGoal || "Not set"}
                     </p>
                   </div>
@@ -599,7 +610,9 @@ export function WeeklyCheckinModal({
           {step === 5 && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label>How do you feel about your progress?</Label>
+                <Label className="text-slate-200">
+                  How do you feel about your progress?
+                </Label>
                 <Textarea
                   placeholder="e.g., Feeling stronger, clothes fitting better, more energy..."
                   value={checkinData.goalsProgress}
@@ -609,28 +622,30 @@ export function WeeklyCheckinModal({
                       goalsProgress: e.target.value,
                     })
                   }
-                  className="resize-none"
+                  className="resize-none bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                   rows={2}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Any other notes for your coach?</Label>
+                <Label className="text-slate-200">
+                  Any other notes for your coach?
+                </Label>
                 <Textarea
                   placeholder="e.g., Traveling next week, want to focus more on cardio..."
                   value={checkinData.notes}
                   onChange={(e) =>
                     setCheckinData({ ...checkinData, notes: e.target.value })
                   }
-                  className="resize-none"
+                  className="resize-none bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
                   rows={2}
                 />
               </div>
 
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="text-sm text-muted-foreground">
-                  <strong>This week:</strong> You completed {completedWorkouts}{" "}
-                  of {totalWorkouts} workouts
+              <div className="bg-slate-800 rounded-xl p-3 border border-slate-700">
+                <p className="text-sm text-slate-300">
+                  <strong className="text-white">This week:</strong> You
+                  completed {completedWorkouts} of {totalWorkouts} workouts
                   {skippedWorkouts > 0 && ` (${skippedWorkouts} skipped)`} (
                   {Math.round((completedWorkouts / totalWorkouts) * 100)}%
                   completion rate)
@@ -645,20 +660,23 @@ export function WeeklyCheckinModal({
               <Button
                 variant="outline"
                 onClick={() => setStep(step - 1)}
-                className="flex-1"
+                className="flex-1 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"
               >
                 Back
               </Button>
             )}
             {step < totalSteps ? (
-              <Button onClick={() => setStep(step + 1)} className="flex-1">
+              <Button
+                onClick={() => setStep(step + 1)}
+                className="flex-1 bg-violet-600 hover:bg-violet-500 text-white"
+              >
                 Continue
               </Button>
             ) : (
               <Button
                 onClick={handleSubmit}
                 disabled={submitting}
-                className="flex-1"
+                className="flex-1 bg-violet-600 hover:bg-violet-500 text-white"
               >
                 {submitting ? (
                   <>
