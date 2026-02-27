@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/supabase/server";
 
-export async function DELETE(request: Request) {
+export async function POST(request: Request) {
   console.log("=== DELETE ACCOUNT API CALLED ===");
 
   try {
