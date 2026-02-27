@@ -180,11 +180,15 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
       });
 
-      if (response.ok) {
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         await supabase.auth.signOut();
         router.push("/");
       } else {
-        alert("Failed to delete account. Please try again.");
+        alert(
+          `Failed to delete account: ${data.error || "Unknown error"}${data.details ? `\n\nDetails: ${data.details}` : ""}`,
+        );
       }
     } catch (error) {
       console.error("Delete error:", error);
