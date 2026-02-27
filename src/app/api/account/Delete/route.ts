@@ -1,11 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getAuthenticatedClient } from "@/lib/supabase/server";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-export async function POST(request: NextRequest) {
+export async function DELETE(request: Request) {
   console.log("=== DELETE ACCOUNT API CALLED ===");
 
   try {
@@ -50,8 +47,6 @@ export async function POST(request: NextRequest) {
     );
 
     // Delete all user data in order (respecting foreign keys)
-    // Order matters! Delete child records before parent records
-
     console.log("📝 Deleting events...");
     await supabaseAdmin.from("events").delete().eq("user_id", userId);
 
@@ -108,11 +103,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-// GET handler for testing if route exists
-export async function GET() {
-  return NextResponse.json({
-    message: "Delete account endpoint is working. Use POST to DELETE.",
-  });
 }
