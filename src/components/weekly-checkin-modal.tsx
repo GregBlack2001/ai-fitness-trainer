@@ -175,6 +175,14 @@ export function WeeklyCheckinModal({
 
       const data = await response.json();
 
+      if (!response.ok) {
+        console.error("Check-in API error:", data);
+        alert(
+          `Error: ${data.error || "Failed to submit check-in"}${data.details ? `\n\nDetails: ${data.details}` : ""}`,
+        );
+        return;
+      }
+
       if (data.success) {
         setAdaptations(data.adaptations || []);
         setSubmitted(true);
@@ -189,9 +197,12 @@ export function WeeklyCheckinModal({
         });
 
         onCheckinComplete(data.adaptations || []);
+      } else {
+        alert(`Error: ${data.error || "Unknown error occurred"}`);
       }
     } catch (error) {
       console.error("Check-in error:", error);
+      alert("Network error - please check your connection and try again");
     } finally {
       setSubmitting(false);
     }

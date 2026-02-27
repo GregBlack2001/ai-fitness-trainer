@@ -3,21 +3,46 @@ import OpenAI from "openai";
 import { getAuthenticatedClient } from "@/lib/supabase/server";
 import { validateCheckinData, validateWorkoutPlan } from "@/lib/validation";
 
+// Check if API key exists
+if (!process.env.OPENAI_API_KEY) {
+  console.error("❌ OPENAI_API_KEY is not set!");
+}
+
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+  apiKey: process.env.OPENAI_API_KEY || "",
 });
 
 export async function POST(request: Request) {
+  console.log("=== CHECKIN API CALLED ===");
+
   try {
-    const { checkinData } = await request.json();
+    // Check API key first
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("❌ Missing OPENAI_API_KEY environment variable");
+      return NextResponse.json(
+        {
+          error: "Server configuration error - missing API key",
+        },
+        { status: 500 },
+      );
+    }
+
+    const body = await request.json();
+    const { checkinData } = body;
+    console.log(
+      "📥 Received checkin data:",
+      JSON.stringify(checkinData, null, 2),
+    );
 
     // Authenticate user via session
     const auth = await getAuthenticatedClient();
     if (!auth) {
+      console.log("❌ Not authenticated");
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
     const { supabase, user } = auth;
     const userId = user.id;
+    console.log("✅ Authenticated user:", userId);
 
     if (!checkinData) {
       return NextResponse.json(
@@ -32,6 +57,7 @@ export async function POST(request: Request) {
     if (checkinErrors.length > 0) {
       console.warn("⚠️ Check-in validation warnings:", checkinErrors);
     }
+    console.log("✅ Validated checkin data");
 
     // Get user profile (RLS enforces user_id = auth.uid())
     const { data: profile, error: profileError } = await supabase
@@ -41,8 +67,10 @@ export async function POST(request: Request) {
       .single();
 
     if (profileError || !profile) {
+      console.error("❌ Profile error:", profileError);
       return NextResponse.json({ error: "Profile not found" }, { status: 404 });
     }
+    console.log("✅ Found profile");
 
     // Get current workout plan
     const { data: currentPlan, error: planError } = await supabase
@@ -53,21 +81,30 @@ export async function POST(request: Request) {
       .single();
 
     if (planError || !currentPlan) {
+      console.error("❌ Plan error:", planError);
       return NextResponse.json(
         { error: "No active plan found" },
         { status: 404 },
       );
     }
+    console.log("✅ Found active plan:", currentPlan.id);
 
     // Get previous check-ins for context
-    const { data: previousCheckins } = await supabase
+    const { data: previousCheckins, error: prevCheckinError } = await supabase
       .from("weekly_checkins")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(4);
 
+    if (prevCheckinError) {
+      console.error("❌ Previous checkins error:", prevCheckinError);
+      // Don't fail - just continue with empty array
+    }
+    console.log("✅ Previous checkins count:", previousCheckins?.length || 0);
+
     // Store the check-in with validated data
+    console.log("📝 Inserting checkin...");
     const { data: newCheckin, error: checkinError } = await supabase
       .from("weekly_checkins")
       .insert({
@@ -79,24 +116,28 @@ export async function POST(request: Request) {
         workout_difficulty: validatedCheckin.workoutDifficulty,
         completed_workouts: validatedCheckin.completedWorkouts,
         total_workouts: validatedCheckin.totalWorkouts,
-        weight_kg: validatedCheckin.currentWeight,
-        notes: validatedCheckin.notes,
-        goals_progress: validatedCheckin.goalsProgress,
-        want_harder: validatedCheckin.wantHarder,
-        want_easier: validatedCheckin.wantEasier,
-        problem_exercises: validatedCheckin.problemExercises,
-        favorite_exercises: validatedCheckin.favoriteExercises,
+        weight_kg: validatedCheckin.currentWeight || null,
+        notes: validatedCheckin.notes || "",
+        goals_progress: validatedCheckin.goalsProgress || "",
+        want_harder: validatedCheckin.wantHarder || false,
+        want_easier: validatedCheckin.wantEasier || false,
+        problem_exercises: validatedCheckin.problemExercises || "",
+        favorite_exercises: validatedCheckin.favoriteExercises || "",
       })
       .select()
       .single();
 
     if (checkinError) {
-      console.error("Check-in error:", checkinError);
+      console.error("❌ Check-in insert error:", checkinError);
       return NextResponse.json(
-        { error: "Failed to save check-in" },
+        {
+          error: "Failed to save check-in",
+          details: checkinError.message,
+        },
         { status: 500 },
       );
     }
+    console.log("✅ Checkin saved:", newCheckin.id);
 
     // Handle profile updates if user changed days or goal
     const profileUpdates: any = {};
@@ -347,27 +388,43 @@ Return ONLY valid JSON:
   ]
 }`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1",
-      messages: [
+    console.log("🤖 Calling OpenAI to generate adapted plan...");
+    let completion;
+    try {
+      completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a fitness expert. Return ONLY valid JSON, no markdown or explanation.",
+          },
+          { role: "user", content: adaptationPrompt },
+        ],
+        temperature: 0.7,
+      });
+      console.log("✅ OpenAI response received");
+    } catch (openaiError: any) {
+      console.error("❌ OpenAI API error:", openaiError);
+      return NextResponse.json(
         {
-          role: "system",
-          content:
-            "You are a fitness expert. Return ONLY valid JSON, no markdown or explanation.",
+          error: "Failed to generate plan - AI service error",
+          details: openaiError?.message || "Unknown OpenAI error",
         },
-        { role: "user", content: adaptationPrompt },
-      ],
-      temperature: 0.7,
-    });
+        { status: 500 },
+      );
+    }
 
     let newPlanData;
     try {
       const content = completion.choices[0].message.content || "";
+      console.log("📝 AI response length:", content.length);
       const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found");
+      if (!jsonMatch) throw new Error("No JSON found in AI response");
       newPlanData = JSON.parse(jsonMatch[0]);
+      console.log("✅ Parsed AI response successfully");
     } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
+      console.error("❌ Failed to parse AI response:", parseError);
       return NextResponse.json(
         { error: "Failed to generate adapted plan" },
         { status: 500 },
@@ -421,8 +478,12 @@ Return ONLY valid JSON:
     });
   } catch (error) {
     console.error("Weekly check-in error:", error);
+    console.error("Error details:", JSON.stringify(error, null, 2));
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 },
     );
   }
