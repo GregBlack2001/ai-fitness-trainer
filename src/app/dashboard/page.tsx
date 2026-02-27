@@ -196,43 +196,76 @@ function DashboardContent() {
     return workoutLogs.find((log) => log.day_index === dayIndex);
   };
 
+  // Helper to get the actual date for a day name in the current plan's week
+  const getDateForDay = (dayName: string): Date | null => {
+    if (!plan?.created_at) return null;
+
+    const planCreatedAt = new Date(plan.created_at);
+    const planDayOfWeek = planCreatedAt.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const targetDayIdx = DAYS.indexOf(dayName);
+
+    // Convert DAYS index (Monday=0) to JS day (Monday=1)
+    const targetJsDay = targetDayIdx === 6 ? 0 : targetDayIdx + 1;
+    const planJsDay = planDayOfWeek;
+
+    // Calculate days from plan creation to target day
+    let daysFromPlanStart = targetJsDay - planJsDay;
+    if (daysFromPlanStart < 0) {
+      // Target day is before plan creation day in the week - it's next occurrence
+      daysFromPlanStart += 7;
+    }
+
+    const targetDate = new Date(planCreatedAt);
+    targetDate.setDate(planCreatedAt.getDate() + daysFromPlanStart);
+    targetDate.setHours(0, 0, 0, 0);
+
+    return targetDate;
+  };
+
   const getDayStatus = (
     dayName: string,
     dayIndex: number,
     isRestDay: boolean,
   ) => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const currentDayName = today.toLocaleDateString("en-US", {
       weekday: "long",
     });
-    const todayIdx = DAYS.indexOf(currentDayName);
-    const thisDayIdx = DAYS.indexOf(dayName);
+    const isToday = dayName === currentDayName;
 
     const completed = !isRestDay && isWorkoutCompleted(dayIndex);
     const skipped = !isRestDay && isWorkoutSkipped(dayIndex);
 
-    const isPastDay = thisDayIdx < todayIdx;
-    const isToday = thisDayIdx === todayIdx;
-    const daysDiff = todayIdx - thisDayIdx;
+    // Get the actual date for this day in the plan's week
+    const dayDate = getDateForDay(dayName);
 
-    // Check if this day is BEFORE the plan was created (new week scenario)
-    // If plan was created on Thursday, Mon/Tue/Wed should be "future" not "missed"
+    let isPastDay = false;
+    let isFutureDay = false;
+    let daysDiff = 0;
     let isBeforePlanStart = false;
-    if (plan?.created_at) {
-      const planCreatedAt = new Date(plan.created_at);
-      const planCreatedDayName = planCreatedAt.toLocaleDateString("en-US", {
-        weekday: "long",
-      });
-      const planCreatedDayIdx = DAYS.indexOf(planCreatedDayName);
 
-      // If we're in the same week as plan creation, days before plan creation are not missed
-      const daysSincePlanCreated = Math.floor(
-        (today.getTime() - planCreatedAt.getTime()) / (1000 * 60 * 60 * 24),
-      );
-      if (daysSincePlanCreated < 7) {
-        // Same week - check if this day is before plan was created
-        isBeforePlanStart = thisDayIdx < planCreatedDayIdx;
-      }
+    if (dayDate) {
+      const planCreatedAt = new Date(plan.created_at);
+      planCreatedAt.setHours(0, 0, 0, 0);
+
+      // Check if this day's date is before the plan was created
+      isBeforePlanStart = dayDate < planCreatedAt;
+
+      // Calculate difference from today
+      const diffTime = today.getTime() - dayDate.getTime();
+      daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+      isPastDay = daysDiff > 0;
+      isFutureDay = daysDiff < 0 || isBeforePlanStart;
+    } else {
+      // Fallback to simple day-of-week comparison
+      const todayIdx = DAYS.indexOf(currentDayName);
+      const thisDayIdx = DAYS.indexOf(dayName);
+      isPastDay = thisDayIdx < todayIdx;
+      daysDiff = todayIdx - thisDayIdx;
+      isFutureDay = !isPastDay && !isToday;
     }
 
     const withinGracePeriod = daysDiff <= 2 && daysDiff > 0;
@@ -248,9 +281,6 @@ function DashboardContent() {
     const canStillComplete = isMissed && withinGracePeriod;
     const isExpired = isMissed && !withinGracePeriod;
 
-    // Days before plan start should appear as upcoming/future
-    const isFutureDay = !isPastDay || isBeforePlanStart;
-
     return {
       completed,
       skipped,
@@ -262,64 +292,52 @@ function DashboardContent() {
       daysDiff,
       isBeforePlanStart,
       isFutureDay,
+      dayDate,
     };
   };
 
   const getNextWorkout = () => {
     const schedule = buildWeekSchedule();
-    const today = new Date();
-    const currentDayName = today.toLocaleDateString("en-US", {
-      weekday: "long",
-    });
-    const todayIdx = DAYS.indexOf(currentDayName);
 
-    // Get plan creation day to know where the week "starts"
-    let planStartDayIdx = 0;
-    if (plan?.created_at) {
-      const planCreatedAt = new Date(plan.created_at);
-      const daysSincePlanCreated = Math.floor(
-        (today.getTime() - planCreatedAt.getTime()) / (1000 * 60 * 60 * 24),
-      );
-      if (daysSincePlanCreated < 7) {
-        planStartDayIdx = DAYS.indexOf(
-          planCreatedAt.toLocaleDateString("en-US", { weekday: "long" }),
-        );
-      }
-    }
+    // Sort workouts by their actual date, putting today first, then future, then past (within grace)
+    const workoutsWithStatus = schedule
+      .filter((item) => !item.isRestDay && item.dayIndex >= 0)
+      .map((item) => ({
+        ...item,
+        status: getDayStatus(item.day, item.dayIndex, item.isRestDay),
+      }))
+      .filter((item) => {
+        // Include if: not completed, not skipped, and either today/future or within grace period
+        if (item.status.completed || item.status.skipped) return false;
+        if (item.status.isToday) return true;
+        if (item.status.isFutureDay) return true;
+        if (item.status.canStillComplete) return true;
+        return false;
+      });
 
-    // Look for today or future workouts first (starting from today)
-    for (let i = todayIdx; i < 7; i++) {
-      const item = schedule[i];
-      if (
-        !item.isRestDay &&
-        item.dayIndex >= 0 &&
-        !isWorkoutCompleted(item.dayIndex) &&
-        !isWorkoutSkipped(item.dayIndex)
-      ) {
-        return { workout: item, index: item.dayIndex };
-      }
-    }
+    // Priority: 1. Today, 2. Missed within grace, 3. Future (sorted by date)
+    const todayWorkout = workoutsWithStatus.find((w) => w.status.isToday);
+    if (todayWorkout)
+      return { workout: todayWorkout, index: todayWorkout.dayIndex };
 
-    // Then check days before today but after plan start (wrap around for next week logic)
-    for (let i = planStartDayIdx; i < todayIdx; i++) {
-      const item = schedule[i];
-      const status = getDayStatus(item.day, item.dayIndex, item.isRestDay);
-      if (status.canStillComplete) {
-        return { workout: item, index: item.dayIndex };
-      }
-    }
+    const missedWithGrace = workoutsWithStatus.find(
+      (w) => w.status.canStillComplete,
+    );
+    if (missedWithGrace)
+      return { workout: missedWithGrace, index: missedWithGrace.dayIndex };
 
-    // Finally, check days before plan start (these are future workouts for this week)
-    for (let i = 0; i < planStartDayIdx; i++) {
-      const item = schedule[i];
-      if (
-        !item.isRestDay &&
-        item.dayIndex >= 0 &&
-        !isWorkoutCompleted(item.dayIndex) &&
-        !isWorkoutSkipped(item.dayIndex)
-      ) {
-        return { workout: item, index: item.dayIndex };
-      }
+    // Find the next future workout (closest date)
+    const futureWorkouts = workoutsWithStatus
+      .filter((w) => w.status.isFutureDay)
+      .sort((a, b) => {
+        if (a.status.dayDate && b.status.dayDate) {
+          return a.status.dayDate.getTime() - b.status.dayDate.getTime();
+        }
+        return DAYS.indexOf(a.day) - DAYS.indexOf(b.day);
+      });
+
+    if (futureWorkouts.length > 0) {
+      return { workout: futureWorkouts[0], index: futureWorkouts[0].dayIndex };
     }
 
     return null;
@@ -546,7 +564,6 @@ function DashboardContent() {
               );
               const log = getWorkoutLog(item.dayIndex);
               const isNext = nextWorkout?.index === item.dayIndex;
-              const isToday = item.day === todayName;
 
               // Rest Day
               if (item.isRestDay) {
@@ -561,7 +578,7 @@ function DashboardContent() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <p className="font-medium text-slate-500">{item.day}</p>
-                        {isToday && (
+                        {status.isToday && (
                           <span className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded">
                             Today
                           </span>
@@ -672,9 +689,7 @@ function DashboardContent() {
 
               // Today / Next / Future (including days before plan start)
               const isUpcoming =
-                status.isBeforePlanStart &&
-                !status.completed &&
-                !status.skipped;
+                status.isFutureDay && !status.isToday && !isNext;
 
               return (
                 <div
@@ -683,7 +698,7 @@ function DashboardContent() {
                   className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all ${
                     isNext
                       ? "bg-violet-500/15 border border-violet-500/40"
-                      : isToday
+                      : status.isToday
                         ? "bg-blue-500/10 border border-blue-500/30"
                         : "bg-slate-800/40 border border-slate-700/40"
                   }`}
@@ -692,7 +707,7 @@ function DashboardContent() {
                     className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                       isNext
                         ? "bg-violet-500"
-                        : isToday
+                        : status.isToday
                           ? "bg-blue-500"
                           : "bg-slate-700"
                     }`}
@@ -702,17 +717,17 @@ function DashboardContent() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-white">{item.day}</p>
-                      {isToday && (
+                      {status.isToday && (
                         <span className="text-[10px] text-blue-400 bg-blue-500/20 px-1.5 py-0.5 rounded">
                           Today
                         </span>
                       )}
-                      {isNext && !isToday && (
+                      {isNext && !status.isToday && (
                         <span className="text-[10px] text-violet-400 bg-violet-500/20 px-1.5 py-0.5 rounded">
                           Next
                         </span>
                       )}
-                      {isUpcoming && !isNext && (
+                      {isUpcoming && (
                         <span className="text-[10px] text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded">
                           Upcoming
                         </span>
