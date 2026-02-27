@@ -176,7 +176,7 @@ export default function SettingsPage() {
     setDeleting(true);
     try {
       const response = await fetch("/api/account/delete", {
-        method: "DELETE",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
       });
 
