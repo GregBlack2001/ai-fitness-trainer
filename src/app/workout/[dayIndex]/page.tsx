@@ -325,7 +325,7 @@ export default function WorkoutSessionPage() {
         (completedExercises / workout.exercises.length) * 100,
       );
 
-      await fetch("/api/workout/log", {
+      const response = await fetch("/api/workout/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -344,6 +344,8 @@ export default function WorkoutSessionPage() {
         }),
       });
 
+      const data = await response.json();
+
       // Log workout completed event
       logEventClient("workout_completed", {
         day_index: dayIndex,
@@ -355,11 +357,18 @@ export default function WorkoutSessionPage() {
         sets_completed: totalSetsCompleted,
         completion_percentage: completionPercentage,
       });
+
+      // Check if this was the last workout of the week
+      if (data.isWeekComplete) {
+        router.push("/dashboard?showCheckin=true");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (error) {
       console.error("Failed to save workout:", error);
+      router.push("/dashboard");
     } finally {
       setSaving(false);
-      router.push("/dashboard");
     }
   };
 

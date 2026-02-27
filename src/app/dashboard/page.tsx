@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -60,6 +60,7 @@ const DAYS = [
 export default function DashboardPage() {
   const supabase = createClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<any>(null);
   const [plan, setPlan] = useState<any>(null);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
@@ -76,6 +77,15 @@ export default function DashboardPage() {
   // Form states
   const [feedback, setFeedback] = useState("");
   const [generatingNextWeek, setGeneratingNextWeek] = useState(false);
+
+  // Check if we should show check-in modal from URL param
+  useEffect(() => {
+    if (searchParams.get("showCheckin") === "true") {
+      setShowCheckinModal(true);
+      // Clean up URL
+      router.replace("/dashboard", { scroll: false });
+    }
+  }, [searchParams, router]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -198,12 +208,42 @@ export default function DashboardPage() {
     const isPastDay = thisDayIdx < todayIdx;
     const isToday = thisDayIdx === todayIdx;
     const daysDiff = todayIdx - thisDayIdx;
+
+    // Check if this day is BEFORE the plan was created (new week scenario)
+    // If plan was created on Thursday, Mon/Tue/Wed should be "future" not "missed"
+    let isBeforePlanStart = false;
+    if (plan?.created_at) {
+      const planCreatedAt = new Date(plan.created_at);
+      const planCreatedDayName = planCreatedAt.toLocaleDateString("en-US", {
+        weekday: "long",
+      });
+      const planCreatedDayIdx = DAYS.indexOf(planCreatedDayName);
+
+      // If we're in the same week as plan creation, days before plan creation are not missed
+      const daysSincePlanCreated = Math.floor(
+        (today.getTime() - planCreatedAt.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      if (daysSincePlanCreated < 7) {
+        // Same week - check if this day is before plan was created
+        isBeforePlanStart = thisDayIdx < planCreatedDayIdx;
+      }
+    }
+
     const withinGracePeriod = daysDiff <= 2 && daysDiff > 0;
 
+    // Only mark as missed if it's a past day AND the plan existed on that day
     const isMissed =
-      isPastDay && !isRestDay && !completed && !skipped && dayIndex >= 0;
+      isPastDay &&
+      !isRestDay &&
+      !completed &&
+      !skipped &&
+      dayIndex >= 0 &&
+      !isBeforePlanStart;
     const canStillComplete = isMissed && withinGracePeriod;
     const isExpired = isMissed && !withinGracePeriod;
+
+    // Days before plan start should appear as upcoming/future
+    const isFutureDay = !isPastDay || isBeforePlanStart;
 
     return {
       completed,
@@ -214,6 +254,8 @@ export default function DashboardPage() {
       canStillComplete,
       isExpired,
       daysDiff,
+      isBeforePlanStart,
+      isFutureDay,
     };
   };
 
@@ -225,7 +267,21 @@ export default function DashboardPage() {
     });
     const todayIdx = DAYS.indexOf(currentDayName);
 
-    // Look for today or future workouts first
+    // Get plan creation day to know where the week "starts"
+    let planStartDayIdx = 0;
+    if (plan?.created_at) {
+      const planCreatedAt = new Date(plan.created_at);
+      const daysSincePlanCreated = Math.floor(
+        (today.getTime() - planCreatedAt.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      if (daysSincePlanCreated < 7) {
+        planStartDayIdx = DAYS.indexOf(
+          planCreatedAt.toLocaleDateString("en-US", { weekday: "long" }),
+        );
+      }
+    }
+
+    // Look for today or future workouts first (starting from today)
     for (let i = todayIdx; i < 7; i++) {
       const item = schedule[i];
       if (
@@ -238,11 +294,24 @@ export default function DashboardPage() {
       }
     }
 
-    // Check for missed workouts within grace period
-    for (let i = 0; i < todayIdx; i++) {
+    // Then check days before today but after plan start (wrap around for next week logic)
+    for (let i = planStartDayIdx; i < todayIdx; i++) {
       const item = schedule[i];
       const status = getDayStatus(item.day, item.dayIndex, item.isRestDay);
       if (status.canStillComplete) {
+        return { workout: item, index: item.dayIndex };
+      }
+    }
+
+    // Finally, check days before plan start (these are future workouts for this week)
+    for (let i = 0; i < planStartDayIdx; i++) {
+      const item = schedule[i];
+      if (
+        !item.isRestDay &&
+        item.dayIndex >= 0 &&
+        !isWorkoutCompleted(item.dayIndex) &&
+        !isWorkoutSkipped(item.dayIndex)
+      ) {
         return { workout: item, index: item.dayIndex };
       }
     }
@@ -626,7 +695,12 @@ export default function DashboardPage() {
                 );
               }
 
-              // Today / Next / Future
+              // Today / Next / Future (including days before plan start)
+              const isUpcoming =
+                status.isBeforePlanStart &&
+                !status.completed &&
+                !status.skipped;
+
               return (
                 <div
                   key={idx}
@@ -661,6 +735,11 @@ export default function DashboardPage() {
                       {isNext && !isToday && (
                         <span className="text-[10px] text-violet-400 bg-violet-500/20 px-1.5 py-0.5 rounded">
                           Next
+                        </span>
+                      )}
+                      {isUpcoming && !isNext && (
+                        <span className="text-[10px] text-slate-400 bg-slate-700 px-1.5 py-0.5 rounded">
+                          Upcoming
                         </span>
                       )}
                     </div>

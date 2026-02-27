@@ -129,12 +129,33 @@ CREATE INDEX idx_workout_logs_completed_at ON workout_logs(completed_at);
 
     console.log("✅ Workout logged successfully:", workoutLog.id);
 
-    // Update user stats (optional - for gamification)
-    // You could track total workouts, streaks, etc.
+    // Check if this completes the week
+    // Get all logs for this plan and the plan's workout days
+    const { data: allLogs } = await supabase
+      .from("workout_logs")
+      .select("day_index, status")
+      .eq("plan_id", planId);
+
+    const { data: planData } = await supabase
+      .from("workout_plans")
+      .select("exercises")
+      .eq("id", planId)
+      .single();
+
+    let isWeekComplete = false;
+    if (planData?.exercises?.workouts && allLogs) {
+      const workoutDays = planData.exercises.workouts.filter(
+        (w: any) => !w.isRestDay && w.exercises?.length > 0,
+      );
+      const totalWorkoutDays = workoutDays.length;
+      const completedOrSkipped = allLogs.length;
+      isWeekComplete = completedOrSkipped >= totalWorkoutDays;
+    }
 
     return NextResponse.json({
       success: true,
       log: workoutLog,
+      isWeekComplete,
     });
   } catch (error) {
     console.error("❌ Workout log error:", error);
