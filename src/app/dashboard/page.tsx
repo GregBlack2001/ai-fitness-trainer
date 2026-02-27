@@ -201,6 +201,8 @@ function DashboardContent() {
     if (!plan?.created_at) return null;
 
     const planCreatedAt = new Date(plan.created_at);
+    planCreatedAt.setHours(0, 0, 0, 0);
+
     const planDayOfWeek = planCreatedAt.getDay(); // 0 = Sunday, 1 = Monday, etc.
     const targetDayIdx = DAYS.indexOf(dayName);
 
@@ -210,8 +212,13 @@ function DashboardContent() {
 
     // Calculate days from plan creation to target day
     let daysFromPlanStart = targetJsDay - planJsDay;
-    if (daysFromPlanStart < 0) {
-      // Target day is before plan creation day in the week - it's next occurrence
+
+    // If target day is on or before plan creation day in the week,
+    // the workout is for NEXT week (add 7 days)
+    // e.g., Plan created Friday, Friday workout = next Friday (7 days)
+    // e.g., Plan created Friday, Monday workout = next Monday (3 days)
+    // e.g., Plan created Friday, Saturday workout = tomorrow (1 day)
+    if (daysFromPlanStart <= 0) {
       daysFromPlanStart += 7;
     }
 
@@ -230,11 +237,6 @@ function DashboardContent() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const currentDayName = today.toLocaleDateString("en-US", {
-      weekday: "long",
-    });
-    const isToday = dayName === currentDayName;
-
     const completed = !isRestDay && isWorkoutCompleted(dayIndex);
     const skipped = !isRestDay && isWorkoutSkipped(dayIndex);
 
@@ -244,25 +246,24 @@ function DashboardContent() {
     let isPastDay = false;
     let isFutureDay = false;
     let daysDiff = 0;
-    let isBeforePlanStart = false;
+    let isToday = false;
 
     if (dayDate) {
-      const planCreatedAt = new Date(plan.created_at);
-      planCreatedAt.setHours(0, 0, 0, 0);
-
-      // Check if this day's date is before the plan was created
-      isBeforePlanStart = dayDate < planCreatedAt;
-
       // Calculate difference from today
       const diffTime = today.getTime() - dayDate.getTime();
       daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
+      isToday = daysDiff === 0;
       isPastDay = daysDiff > 0;
-      isFutureDay = daysDiff < 0 || isBeforePlanStart;
+      isFutureDay = daysDiff < 0;
     } else {
       // Fallback to simple day-of-week comparison
+      const currentDayName = today.toLocaleDateString("en-US", {
+        weekday: "long",
+      });
       const todayIdx = DAYS.indexOf(currentDayName);
       const thisDayIdx = DAYS.indexOf(dayName);
+      isToday = dayName === currentDayName;
       isPastDay = thisDayIdx < todayIdx;
       daysDiff = todayIdx - thisDayIdx;
       isFutureDay = !isPastDay && !isToday;
@@ -270,14 +271,9 @@ function DashboardContent() {
 
     const withinGracePeriod = daysDiff <= 2 && daysDiff > 0;
 
-    // Only mark as missed if it's a past day AND the plan existed on that day
+    // Only mark as missed if it's a past day (date-based, so already accounts for plan creation)
     const isMissed =
-      isPastDay &&
-      !isRestDay &&
-      !completed &&
-      !skipped &&
-      dayIndex >= 0 &&
-      !isBeforePlanStart;
+      isPastDay && !isRestDay && !completed && !skipped && dayIndex >= 0;
     const canStillComplete = isMissed && withinGracePeriod;
     const isExpired = isMissed && !withinGracePeriod;
 
@@ -290,7 +286,6 @@ function DashboardContent() {
       canStillComplete,
       isExpired,
       daysDiff,
-      isBeforePlanStart,
       isFutureDay,
       dayDate,
     };
