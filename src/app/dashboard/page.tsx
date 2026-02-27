@@ -4,11 +4,9 @@ import { Suspense, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -23,9 +21,7 @@ import {
   ChevronRight,
   MessageSquare,
   Target,
-  ArrowRight,
   Zap,
-  Eye,
   SkipForward,
   AlertTriangle,
   TrendingUp,
@@ -84,14 +80,9 @@ function DashboardContent() {
 
   // Modal states
   const [showCheckinModal, setShowCheckinModal] = useState(false);
-  const [showNextWeekDialog, setShowNextWeekDialog] = useState(false);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [previewWorkout, setPreviewWorkout] = useState<any>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-
-  // Form states
-  const [feedback, setFeedback] = useState("");
-  const [generatingNextWeek, setGeneratingNextWeek] = useState(false);
 
   // Check if we should show check-in modal from URL param
   useEffect(() => {
@@ -358,37 +349,6 @@ function DashboardContent() {
     setShowPreviewDialog(true);
   };
 
-  const handleGenerateNextWeek = async () => {
-    if (!profile?.id) return;
-    setGeneratingNextWeek(true);
-
-    try {
-      const response = await fetch("/api/workout/next-week", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: profile.id,
-          feedback: feedback.trim() || undefined,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setShowNextWeekDialog(false);
-        setFeedback("");
-        window.location.reload();
-      } else {
-        alert(data.message || "Failed to generate next week");
-      }
-    } catch (error) {
-      console.error("Failed to generate next week:", error);
-      alert("Failed to generate next week. Please try again.");
-    } finally {
-      setGeneratingNextWeek(false);
-    }
-  };
-
   const handleCheckinComplete = () => {
     window.location.reload();
   };
@@ -470,7 +430,7 @@ function DashboardContent() {
             <span>{totalMinutes} min trained</span>
             {isWeekComplete && (
               <button
-                onClick={() => setShowNextWeekDialog(true)}
+                onClick={() => setShowCheckinModal(true)}
                 className="text-violet-400 font-medium flex items-center gap-1"
               >
                 <Zap className="h-3 w-3" /> Next Week
@@ -524,7 +484,7 @@ function DashboardContent() {
               You finished {completedCount} workouts
             </p>
             <Button
-              onClick={() => setShowNextWeekDialog(true)}
+              onClick={() => setShowCheckinModal(true)}
               className="mt-4 bg-white text-emerald-700 hover:bg-emerald-50"
             >
               <Zap className="h-4 w-4 mr-2" />
@@ -797,61 +757,7 @@ function DashboardContent() {
         </div>
       </main>
 
-      {/* Dialogs */}
-      <Dialog open={showNextWeekDialog} onOpenChange={setShowNextWeekDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Zap className="h-5 w-5 text-violet-400" />
-              Generate Week {(plan?.week_number || 1) + 1}
-            </DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Ready for the next challenge?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3 bg-slate-800/50 rounded-xl">
-                <p className="text-xl font-bold text-white">{completedCount}</p>
-                <p className="text-[10px] text-slate-500">Completed</p>
-              </div>
-              <div className="text-center p-3 bg-slate-800/50 rounded-xl">
-                <p className="text-xl font-bold text-white">{totalMinutes}m</p>
-                <p className="text-[10px] text-slate-500">Trained</p>
-              </div>
-            </div>
-            <Textarea
-              placeholder="Any feedback? (optional)"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              className="bg-slate-800 border-slate-700 text-white text-sm"
-              rows={2}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowNextWeekDialog(false)}
-              className="border-slate-700 text-slate-300"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleGenerateNextWeek}
-              disabled={generatingNextWeek}
-              className="bg-violet-600 hover:bg-violet-500"
-            >
-              {generatingNextWeek ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ArrowRight className="h-4 w-4 mr-1" />
-              )}
-              Generate
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      {/* Preview Dialog */}
       <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
         <DialogContent className="bg-slate-900 border-slate-800 max-h-[80vh] overflow-y-auto">
           <DialogHeader>

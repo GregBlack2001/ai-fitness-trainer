@@ -384,7 +384,7 @@ export default function WorkoutSessionPage() {
 
     try {
       // Save skipped workout log
-      await fetch("/api/workout/log", {
+      const response = await fetch("/api/workout/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -404,6 +404,8 @@ export default function WorkoutSessionPage() {
         }),
       });
 
+      const data = await response.json();
+
       // Log the skip event
       logEventClient("workout_skipped", {
         day_index: dayIndex,
@@ -412,11 +414,18 @@ export default function WorkoutSessionPage() {
         total_exercises: workout.exercises.length,
         reason: "user_skipped",
       });
+
+      // Check if this was the last workout of the week
+      if (data.isWeekComplete) {
+        router.push("/dashboard?showCheckin=true");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (error) {
       console.error("Failed to save skipped workout:", error);
+      router.push("/dashboard");
     } finally {
       setSaving(false);
-      router.push("/dashboard");
     }
   };
 
