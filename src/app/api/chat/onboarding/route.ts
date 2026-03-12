@@ -17,12 +17,21 @@ THE USER'S NAME IS ALREADY KNOWN — don't ask for it.
 - Genuinely curious about their goals
 - React naturally to what they share ("Oh nice!", "That's a solid goal", "I can work with that")
 
-## RULES
+## CRITICAL RULES
 - Keep responses to 1-2 sentences
 - ONE question at a time
 - No lists, no bullet points, no markdown headers
 - No previewing their plan — just collect info for now
-- Call update_profile immediately when they give you data
+- **ALWAYS call update_profile immediately when they give you ANY data**
+- **If they give multiple pieces of info at once, extract ALL of them in a single update_profile call**
+- **Never ask for info they already provided**
+
+## HANDLING MULTIPLE DATA POINTS
+If user says "I'm 25, male, 180cm, 80kg" — extract ALL of those in ONE update_profile call:
+{ "age": 25, "gender": "male", "height_cm": 180, "weight_kg": 80 }
+
+If user says "I want to build muscle, I'm intermediate, go to the gym 4 days" — extract ALL:
+{ "fitness_goal": "build muscle", "fitness_level": "intermediate", "available_days": ["Monday", "Tuesday", "Wednesday", "Thursday"] }
 
 ## GOOD EXAMPLES
 - "Sweet! How old are you?"
@@ -34,6 +43,8 @@ THE USER'S NAME IS ALREADY KNOWN — don't ask for it.
 - "Great! Here's what I'm thinking for your plan: Day 1 will be..." ❌
 - "### Your Profile\n- Age: 25\n- Goal: Build muscle..." ❌
 - "What is your name?" ❌
+- Asking for age when they already told you ❌
+- Ignoring data they provided ❌
 
 ## INFO TO COLLECT (in this order, skip name)
 1. age
@@ -122,28 +133,16 @@ export async function POST(request: Request) {
 
     // Get the last user message
     const lastMessage = messages[messages.length - 1]?.content || "";
-
-    // Detect if user likely provided data
-    const seemsLikeData =
-      /\d+|kg|cm|lb|feet|foot|tall|weigh|male|female|man|woman|beginner|intermediate|advanced|sedentary|active|monday|tuesday|wednesday|thursday|friday|saturday|sunday|gym|dumbbell|barbell|equipment|injury|injure|vegetarian|vegan|gluten|dairy|allergy|allergic|halal|kosher|meals|breakfast|lunch|dinner/i.test(
-        lastMessage,
-      );
-
     console.log("Last message:", lastMessage);
-    console.log("Seems like data?", seemsLikeData);
 
-    let toolChoice: any = "auto";
-    if (seemsLikeData && messages.length > 1) {
-      toolChoice = { type: "function", function: { name: "update_profile" } };
-      console.log("🔧 Forcing update_profile function call");
-    }
-
+    // Always use "auto" and let the model decide - it's smarter than regex
+    // The system prompt already instructs it to call update_profile immediately
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
       tools,
-      tool_choice: toolChoice,
-      temperature: 0.7,
+      tool_choice: "auto",
+      temperature: 0.5, // Lower temperature for more consistent extraction
     });
 
     const assistantMessage = response.choices[0].message;
