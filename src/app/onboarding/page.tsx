@@ -200,7 +200,12 @@ I'll ask you a few quick questions about your goals, schedule, and preferences.
 
     const userMessage = input.trim();
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+
+    // Create new message object
+    const newUserMessage = { role: "user" as const, content: userMessage };
+
+    // Update UI immediately
+    setMessages((prev) => [...prev, newUserMessage]);
     setIsLoading(true);
 
     if (isListening && recognitionRef.current) {
@@ -209,13 +214,16 @@ I'll ask you a few quick questions about your goals, schedule, and preferences.
     }
 
     try {
+      // Include the new message in conversation history
+      const updatedHistory = [...messages, newUserMessage];
+
       const response = await fetch("/api/chat/onboarding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMessage,
           userId,
-          conversationHistory: messages,
+          conversationHistory: updatedHistory,
         }),
       });
 
