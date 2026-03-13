@@ -26,6 +26,13 @@ THE USER'S NAME IS ALREADY KNOWN — don't ask for it.
 - **If they give multiple pieces of info at once, extract ALL of them in a single update_profile call**
 - **Never ask for info they already provided**
 
+## HANDLING INJURIES - VERY IMPORTANT
+When a user mentions ANY injury, pain, or physical limitation (e.g., "ACL tear", "bad back", "knee pain", "sprained ankle", "shoulder injury", etc.):
+1. Save the injury using update_profile immediately
+2. ALWAYS include this disclaimer in your response:
+   "⚠️ Important: I'm not a medical professional. Please make sure you've been cleared by a doctor or physiotherapist before starting any exercise programme. I'll design your workouts to avoid aggravating your injury, but this isn't medical advice."
+3. Then continue with the next question
+
 ## HANDLING MULTIPLE DATA POINTS
 If user says "I'm 25, male, 180cm, 80kg" — extract ALL of those in ONE update_profile call:
 { "age": 25, "gender": "male", "height_cm": 180, "weight_kg": 80 }
@@ -45,6 +52,7 @@ If user says "I want to build muscle, I'm intermediate, go to the gym 4 days" �
 - "What is your name?" ❌
 - Asking for age when they already told you ❌
 - Ignoring data they provided ❌
+- NOT giving the medical disclaimer when they mention an injury ❌
 
 ## INFO TO COLLECT (in this order, skip name)
 1. age
@@ -113,6 +121,104 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     },
   },
 ];
+
+// Helper function to generate injury-specific exercise restrictions
+function getInjuryRestrictions(injuries: string[]): string {
+  if (!injuries || injuries.length === 0) return "";
+
+  const restrictions: string[] = [];
+  const injuryLower = injuries.map((i) => i.toLowerCase()).join(" ");
+
+  // ACL / Knee injuries
+  if (
+    injuryLower.includes("acl") ||
+    injuryLower.includes("knee") ||
+    injuryLower.includes("mcl") ||
+    injuryLower.includes("meniscus")
+  ) {
+    restrictions.push(`
+**KNEE/ACL INJURY - CRITICAL RESTRICTIONS:**
+- NEVER include: Squats, Lunges, Leg Press with deep knee bend, Box Jumps, Jump Squats, Jumping exercises, Running, Plyometrics
+- AVOID: Any exercise requiring deep knee flexion beyond 90 degrees
+- SAFE alternatives: Leg Extensions (limited ROM), Leg Curls, Hip Thrusts, Glute Bridges, Seated Calf Raises, Upper body exercises
+- Focus on: Upper body work, core stability, hip strengthening`);
+  }
+
+  // Ankle injuries
+  if (injuryLower.includes("ankle") || injuryLower.includes("achilles")) {
+    restrictions.push(`
+**ANKLE INJURY - CRITICAL RESTRICTIONS:**
+- NEVER include: Running, Jumping, Box Jumps, Jump Rope, Standing Calf Raises, Lunges, any plyometric movements
+- AVOID: Exercises requiring ankle stability or single-leg balance
+- SAFE alternatives: Seated exercises, Upper body work, Leg Press (if pain-free), Leg Curls, Leg Extensions, Swimming movements
+- Focus on: Seated and lying exercises, upper body, core work`);
+  }
+
+  // Shoulder injuries
+  if (injuryLower.includes("shoulder") || injuryLower.includes("rotator")) {
+    restrictions.push(`
+**SHOULDER INJURY - CRITICAL RESTRICTIONS:**
+- NEVER include: Overhead Press, Behind-neck exercises, Upright Rows, Dips (if painful), Wide-grip movements
+- AVOID: Any pressing or pulling that causes pain above shoulder height
+- SAFE alternatives: Neutral grip exercises, Cable work with controlled ROM, Front Raises (light), Lower body exercises
+- Focus on: Lower body, core, light rehab movements if cleared`);
+  }
+
+  // Back injuries
+  if (
+    injuryLower.includes("back") ||
+    injuryLower.includes("spine") ||
+    injuryLower.includes("disc") ||
+    injuryLower.includes("herniat")
+  ) {
+    restrictions.push(`
+**BACK/SPINE INJURY - CRITICAL RESTRICTIONS:**
+- NEVER include: Deadlifts, Bent-over Rows, Good Mornings, Heavy Squats, any spinal loading exercises
+- AVOID: Exercises that compress the spine or require spinal flexion/extension under load
+- SAFE alternatives: Machine exercises with back support, Leg Press, Chest-supported Rows, Cable exercises
+- Focus on: Core stability (planks, bird dogs), supported exercises, light movements`);
+  }
+
+  // Wrist/Hand injuries
+  if (
+    injuryLower.includes("wrist") ||
+    injuryLower.includes("hand") ||
+    injuryLower.includes("carpal")
+  ) {
+    restrictions.push(`
+**WRIST/HAND INJURY - CRITICAL RESTRICTIONS:**
+- NEVER include: Push-ups on hands, Barbell exercises requiring grip, Pull-ups, Hanging exercises
+- AVOID: Any exercise requiring strong wrist extension or heavy gripping
+- SAFE alternatives: Machine exercises, Forearm-supported exercises, Lower body work, exercises with straps
+- Focus on: Lower body, machine-based upper body, minimal grip requirements`);
+  }
+
+  // Hip injuries
+  if (
+    injuryLower.includes("hip") ||
+    injuryLower.includes("groin") ||
+    injuryLower.includes("labrum")
+  ) {
+    restrictions.push(`
+**HIP INJURY - CRITICAL RESTRICTIONS:**
+- NEVER include: Deep Squats, Sumo Deadlifts, Wide-stance exercises, Hip Abduction/Adduction machines
+- AVOID: Exercises requiring extreme hip flexion or rotation
+- SAFE alternatives: Limited ROM leg exercises, Upper body work, Core exercises avoiding hip flexion
+- Focus on: Upper body, gentle hip mobility if cleared, core stability`);
+  }
+
+  if (restrictions.length === 0) {
+    // Generic injury warning
+    restrictions.push(`
+**USER HAS REPORTED INJURY: ${injuries.join(", ")}**
+- Be conservative with exercise selection
+- Avoid exercises that could stress the injured area
+- Prioritise exercises that work around the injury
+- Include mobility and recovery work`);
+  }
+
+  return restrictions.join("\n");
+}
 
 export async function POST(request: Request) {
   try {
@@ -274,6 +380,11 @@ export async function POST(request: Request) {
             profile.fitness_goal || "general fitness",
           );
 
+          // Get injury-specific restrictions
+          const injuryRestrictions = getInjuryRestrictions(
+            profile.injuries || [],
+          );
+
           // Determine training parameters based on goal
           const goalLower = (profile.fitness_goal || "").toLowerCase();
           let repGuidance = "8-12 reps for hypertrophy";
@@ -320,6 +431,19 @@ USER PROFILE:
 - Equipment Available: ${equipmentDesc}
 - Injuries/Limitations: ${profile.injuries?.length > 0 ? profile.injuries.join(", ") : "None"}
 
+${
+  injuryRestrictions
+    ? `
+## ⚠️ INJURY RESTRICTIONS - MUST FOLLOW ⚠️
+${injuryRestrictions}
+
+** YOU MUST NOT INCLUDE ANY EXERCISES LISTED IN THE "NEVER INCLUDE" SECTIONS ABOVE. **
+** THIS IS NON-NEGOTIABLE. THE USER HAS A REAL INJURY. **
+** DOUBLE-CHECK EVERY EXERCISE BEFORE INCLUDING IT. **
+`
+    : ""
+}
+
 TRAINING PARAMETERS FOR THIS GOAL:
 - Rep Range: ${repGuidance}
 - Rest Between Sets: ${restGuidance}
@@ -334,6 +458,7 @@ ${exerciseContext}
 - Follow with 2-3 accessory/isolation exercises
 - End with core or conditioning work if time allows
 - Choose exercises that match their equipment and ability level
+${profile.injuries?.length > 0 ? "- **CRITICAL: Re-read the injury restrictions above. Do NOT include any contraindicated exercises.**" : ""}
 
 **Smart Programming:**
 - Balance push/pull movements across the week
@@ -361,6 +486,20 @@ ${
       : preferredDays.length >= 5
         ? "Push/Pull/Legs or Bro Split — dedicated focus areas"
         : ""
+}
+
+${
+  profile.injuries?.length > 0
+    ? `
+## FINAL INJURY CHECK
+Before returning the plan, verify:
+1. Have you excluded ALL exercises from the "NEVER INCLUDE" list?
+2. Are all exercises safe for someone with: ${profile.injuries.join(", ")}?
+3. Have you provided safe alternatives that work around the injury?
+
+If any exercise could aggravate the injury, REMOVE IT and replace with a safe alternative.
+`
+    : ""
 }
 
 Return a JSON object with ALL 7 days:
@@ -399,7 +538,7 @@ Return valid JSON only with all 7 days. Create workouts that someone would actua
               {
                 role: "system",
                 content:
-                  "You are an experienced personal trainer who creates effective, enjoyable workout programs. You understand progressive overload, proper exercise selection, and how to match workouts to individual goals. Return only valid JSON.",
+                  "You are an experienced personal trainer who creates effective, enjoyable workout programs. You understand progressive overload, proper exercise selection, and how to match workouts to individual goals. You are extremely careful about injuries and NEVER include exercises that could aggravate an injury. Return only valid JSON.",
               },
               { role: "user", content: planPrompt },
             ],
@@ -450,13 +589,19 @@ Return valid JSON only with all 7 days. Create workouts that someone would actua
 
           console.log("✅ Workout plan created and validated!");
 
+          // Add injury note to completion message if user has injuries
+          const injuryNote =
+            profile.injuries?.length > 0
+              ? `\n\n⚠️ Your plan has been designed to work around your ${profile.injuries.join(", ")}. Remember to listen to your body and stop any exercise that causes pain.`
+              : "";
+
           return NextResponse.json({
             message: `🎉 Your personalized plan is ready!
 
 I've created a ${profile.available_days?.length || 3}-day workout plan tailored to your ${profile.fitness_goal} goal.
 
 Your plan includes:
-${workoutPlan.workouts?.map((w: any) => `• **${w.day}**: ${w.focus} (${w.duration_minutes} min)`).join("\n") || "Custom workouts for your schedule"}
+${workoutPlan.workouts?.map((w: any) => `• **${w.day}**: ${w.focus} (${w.duration_minutes} min)`).join("\n") || "Custom workouts for your schedule"}${injuryNote}
 
 Click "Go to Dashboard" to see your full plan and start training!`,
             completed: true,
