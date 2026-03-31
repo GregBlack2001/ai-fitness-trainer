@@ -220,6 +220,7 @@ function DashboardContent() {
 
   // Helper to get the actual date for a day name in the current plan's week
   // Uses plan_start_date to determine when the workout week began
+  // Days BEFORE the plan_start_date day are treated as NEXT week (future), not past
   const getDateForDay = (dayName: string): Date | null => {
     // Use plan_start_date if available, otherwise fall back to created_at
     const planStartDateStr = plan?.plan_start_date || plan?.created_at;
@@ -236,12 +237,14 @@ function DashboardContent() {
     const startDayIdx = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
 
     // Calculate how many days from plan start to the target day
-    // If plan started on Tuesday (1) and target is Monday (0), that Monday is in the past (-1 day)
-    // If plan started on Tuesday (1) and target is Friday (4), that's +3 days
     let daysFromStart = targetDayIdx - startDayIdx;
 
-    // For days before the plan start day, they would be in the past
-    // But within the same "week", we treat the week as starting from plan_start_date
+    // KEY FIX: If the target day is BEFORE the plan start day (negative),
+    // it means this day is in the NEXT week, not the past
+    // e.g., Plan starts Friday (4), Monday (0) is 0-4 = -4, so add 7 to get +3 (next Monday)
+    if (daysFromStart < 0) {
+      daysFromStart += 7;
+    }
 
     const targetDate = new Date(planStartDate);
     targetDate.setDate(planStartDate.getDate() + daysFromStart);
