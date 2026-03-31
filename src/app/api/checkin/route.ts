@@ -448,7 +448,8 @@ Return ONLY valid JSON:
       .update({ is_active: false })
       .eq("id", currentPlan.id);
 
-    // Create new adapted plan
+    // Create new adapted plan with plan_start_date for day alignment
+    const planStartDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
     const { data: newPlan, error: newPlanError } = await supabase
       .from("workout_plans")
       .insert({
@@ -458,6 +459,7 @@ Return ONLY valid JSON:
         week_number: (currentPlan.week_number || 1) + 1,
         adaptations: newPlanData.adaptations_made,
         based_on_checkin: newCheckin.id,
+        plan_start_date: planStartDate,
       })
       .select()
       .single();

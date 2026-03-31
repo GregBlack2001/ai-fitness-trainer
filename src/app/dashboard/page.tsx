@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   TrendingUp,
   Coffee,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { logEventClient } from "@/lib/events";
@@ -84,6 +85,10 @@ function DashboardContent() {
   const [previewWorkout, setPreviewWorkout] = useState<any>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
+  // Week expired state - when plan is > 7 days old with incomplete workouts
+  const [isWeekExpired, setIsWeekExpired] = useState(false);
+  const [daysSincePlanStart, setDaysSincePlanStart] = useState(0);
+
   // Check if we should show check-in modal from URL param
   useEffect(() => {
     if (searchParams.get("showCheckin") === "true") {
@@ -130,6 +135,23 @@ function DashboardContent() {
       }
 
       setPlan(planData);
+
+      // Check if week has expired (>7 days since plan_start_date)
+      const planStartDate = planData.plan_start_date || planData.created_at;
+      if (planStartDate) {
+        const startDate = new Date(planStartDate);
+        startDate.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const diffDays = Math.floor(
+          (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+        );
+        setDaysSincePlanStart(diffDays);
+
+        if (diffDays > 7) {
+          setIsWeekExpired(true);
+        }
+      }
 
       const { data: logsData } = await supabase
         .from("workout_logs")
@@ -197,39 +219,32 @@ function DashboardContent() {
   };
 
   // Helper to get the actual date for a day name in the current plan's week
-  // The "week" always starts on Monday, so workouts are scheduled for the
-  // upcoming Monday-Sunday period after plan creation
+  // Uses plan_start_date to determine when the workout week began
   const getDateForDay = (dayName: string): Date | null => {
-    if (!plan?.created_at) return null;
+    // Use plan_start_date if available, otherwise fall back to created_at
+    const planStartDateStr = plan?.plan_start_date || plan?.created_at;
+    if (!planStartDateStr) return null;
 
-    const planCreatedAt = new Date(plan.created_at);
-    planCreatedAt.setHours(0, 0, 0, 0);
+    const planStartDate = new Date(planStartDateStr);
+    planStartDate.setHours(0, 0, 0, 0);
 
     const targetDayIdx = DAYS.indexOf(dayName); // Monday=0, Sunday=6
 
-    // Find the next Monday on or after plan creation
-    const planDayOfWeek = planCreatedAt.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-
+    // Get the day of week when plan started
+    const startDayOfWeek = planStartDate.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
     // Convert JS day (0=Sun) to our day index (0=Mon)
-    // JS: Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
-    // Our: Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6
-    const planDayIdx = planDayOfWeek === 0 ? 6 : planDayOfWeek - 1;
+    const startDayIdx = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
 
-    // Calculate days until the start of the "plan week" (next Monday)
-    // If plan created on Monday, week starts that Monday
-    // If plan created on Tuesday-Sunday, week starts next Monday
-    let daysUntilWeekStart = 0;
-    if (planDayIdx > 0) {
-      // Plan created Tue-Sun, so next Monday is (7 - planDayIdx) days away
-      daysUntilWeekStart = 7 - planDayIdx;
-    }
-    // If planDayIdx === 0 (Monday), week starts today, daysUntilWeekStart = 0
+    // Calculate how many days from plan start to the target day
+    // If plan started on Tuesday (1) and target is Monday (0), that Monday is in the past (-1 day)
+    // If plan started on Tuesday (1) and target is Friday (4), that's +3 days
+    let daysFromStart = targetDayIdx - startDayIdx;
 
-    // The target day is (daysUntilWeekStart + targetDayIdx) days from plan creation
-    const daysFromPlanStart = daysUntilWeekStart + targetDayIdx;
+    // For days before the plan start day, they would be in the past
+    // But within the same "week", we treat the week as starting from plan_start_date
 
-    const targetDate = new Date(planCreatedAt);
-    targetDate.setDate(planCreatedAt.getDate() + daysFromPlanStart);
+    const targetDate = new Date(planStartDate);
+    targetDate.setDate(planStartDate.getDate() + daysFromStart);
     targetDate.setHours(0, 0, 0, 0);
 
     return targetDate;
@@ -277,11 +292,16 @@ function DashboardContent() {
 
     const withinGracePeriod = daysDiff <= 2 && daysDiff > 0;
 
-    // Only mark as missed if it's a past day (date-based, so already accounts for plan creation)
+    // If week is expired (>7 days), all incomplete workouts are expired/missed
+    // Only mark as missed if it's a past day OR week is expired
     const isMissed =
-      isPastDay && !isRestDay && !completed && !skipped && dayIndex >= 0;
-    const canStillComplete = isMissed && withinGracePeriod;
-    const isExpired = isMissed && !withinGracePeriod;
+      (isPastDay || isWeekExpired) &&
+      !isRestDay &&
+      !completed &&
+      !skipped &&
+      dayIndex >= 0;
+    const canStillComplete = isMissed && withinGracePeriod && !isWeekExpired;
+    const isExpiredDay = isMissed && (!withinGracePeriod || isWeekExpired);
 
     return {
       completed,
@@ -290,7 +310,7 @@ function DashboardContent() {
       isToday,
       isMissed,
       canStillComplete,
-      isExpired,
+      isExpired: isExpiredDay,
       daysDiff,
       isFutureDay,
       dayDate,
@@ -298,6 +318,9 @@ function DashboardContent() {
   };
 
   const getNextWorkout = () => {
+    // If week is expired, no next workout - user must regenerate
+    if (isWeekExpired) return null;
+
     const schedule = buildWeekSchedule();
 
     // Sort workouts by their actual date, putting today first, then future, then past (within grace)
@@ -432,27 +455,36 @@ function DashboardContent() {
         </div>
 
         {/* Progress Overview */}
-        <div className="bg-slate-800/60 backdrop-blur rounded-2xl p-4 border border-slate-700/50">
+        <div
+          className={`bg-slate-800/60 backdrop-blur rounded-2xl p-4 border ${isWeekExpired ? "border-red-500/50" : "border-slate-700/50"}`}
+        >
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-slate-400">Weekly Progress</span>
+            <span className="text-sm text-slate-400">
+              {isWeekExpired ? "Week Expired" : "Weekly Progress"}
+            </span>
             <span className="text-sm font-semibold text-white">
               {completedCount}/{totalWorkouts} workouts
             </span>
           </div>
           <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${isWeekExpired ? "bg-gradient-to-r from-red-500 to-orange-500" : "bg-gradient-to-r from-violet-500 to-indigo-500"}`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
           <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
             <span>{totalMinutes} min trained</span>
-            {isWeekComplete && (
+            {(isWeekComplete || isWeekExpired) && (
               <button
                 onClick={() => setShowCheckinModal(true)}
-                className="text-violet-400 font-medium flex items-center gap-1"
+                className={`font-medium flex items-center gap-1 ${isWeekExpired ? "text-red-400" : "text-violet-400"}`}
               >
-                <Zap className="h-3 w-3" /> Next Week
+                {isWeekExpired ? (
+                  <RefreshCw className="h-3 w-3" />
+                ) : (
+                  <Zap className="h-3 w-3" />
+                )}
+                {isWeekExpired ? "Regenerate" : "Next Week"}
               </button>
             )}
           </div>
@@ -460,8 +492,30 @@ function DashboardContent() {
       </header>
 
       <main className="px-4 space-y-6">
+        {/* Week Expired Banner - Show when plan is > 7 days old */}
+        {isWeekExpired && (
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-600/90 to-orange-700 p-5 text-center -mt-2">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
+            <div className="relative">
+              <div className="text-3xl mb-2">⏰</div>
+              <h3 className="text-white text-lg font-bold">Week Expired</h3>
+              <p className="text-red-100 text-sm mt-1">
+                It's been {daysSincePlanStart} days since your plan started. All
+                incomplete workouts have been marked as skipped.
+              </p>
+              <Button
+                onClick={() => setShowCheckinModal(true)}
+                className="mt-4 bg-white text-red-700 hover:bg-red-50"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Generate New Week
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Next Workout CTA */}
-        {nextWorkout && !isWeekComplete && (
+        {nextWorkout && !isWeekComplete && !isWeekExpired && (
           <div
             className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-700 p-5 cursor-pointer active:scale-[0.98] transition-transform -mt-2"
             onClick={() => handleStartWorkout(nextWorkout.index)}
