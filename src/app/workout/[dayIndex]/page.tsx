@@ -4,9 +4,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -21,9 +18,6 @@ import {
   Pause,
   SkipForward,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  RotateCcw,
   Dumbbell,
   Clock,
   Flame,
@@ -31,6 +25,10 @@ import {
   X,
   Volume2,
   VolumeX,
+  Zap,
+  Timer,
+  ChevronDown,
+  Info,
 } from "lucide-react";
 import { logEventClient } from "@/lib/events";
 
@@ -88,6 +86,7 @@ export default function WorkoutSessionPage() {
   // UI state
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showCompleteDialog, setShowCompleteDialog] = useState(false);
+  const [showExerciseList, setShowExerciseList] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -129,7 +128,6 @@ export default function WorkoutSessionPage() {
       setExerciseLogs(logs);
       setLoading(false);
 
-      // Log workout started event
       logEventClient("workout_started", {
         day_index: dayIndex,
         workout_day: plan.exercises.workouts[dayIndex].day,
@@ -171,7 +169,6 @@ export default function WorkoutSessionPage() {
   const playSound = useCallback(
     (type: "complete" | "rest" | "finish") => {
       if (!soundEnabled) return;
-      // Using Web Audio API for simple beeps
       const audioContext = new (
         window.AudioContext || (window as any).webkitAudioContext
       )();
@@ -213,7 +210,6 @@ export default function WorkoutSessionPage() {
     if (phase === "warmup") {
       setPhase("exercise");
     } else if (phase === "rest") {
-      // Move to next set or exercise
       const currentExercise = workout?.exercises[currentExerciseIndex];
       if (currentSet < (currentExercise?.sets || 1)) {
         setCurrentSet((prev) => prev + 1);
@@ -232,7 +228,6 @@ export default function WorkoutSessionPage() {
       setCurrentSet(1);
       setPhase("exercise");
     } else {
-      // Workout complete!
       setPhase("complete");
       playSound("finish");
       if (elapsedRef.current) clearInterval(elapsedRef.current);
@@ -242,7 +237,7 @@ export default function WorkoutSessionPage() {
 
   const startWarmup = () => {
     setPhase("warmup");
-    setTimeRemaining(60); // 1 minute warmup
+    setTimeRemaining(60);
     setIsTimerRunning(true);
   };
 
@@ -253,7 +248,6 @@ export default function WorkoutSessionPage() {
   const completeSet = () => {
     if (!workout) return;
 
-    // Log the completed set
     setExerciseLogs((prev) => {
       const updated = [...prev];
       updated[currentExerciseIndex].completedSets.push(currentSet);
@@ -263,12 +257,10 @@ export default function WorkoutSessionPage() {
     const currentExercise = workout.exercises[currentExerciseIndex];
 
     if (currentSet < currentExercise.sets) {
-      // Start rest timer
       setPhase("rest");
       setTimeRemaining(currentExercise.rest_seconds || 60);
       setIsTimerRunning(true);
     } else {
-      // All sets complete for this exercise
       moveToNextExercise();
     }
   };
@@ -300,7 +292,7 @@ export default function WorkoutSessionPage() {
   };
 
   const addRestTime = (seconds: number) => {
-    setTimeRemaining((prev) => prev + seconds);
+    setTimeRemaining((prev) => Math.max(0, prev + seconds));
   };
 
   const formatTime = (seconds: number) => {
@@ -346,7 +338,6 @@ export default function WorkoutSessionPage() {
 
       const data = await response.json();
 
-      // Log workout completed event
       logEventClient("workout_completed", {
         day_index: dayIndex,
         workout_day: workout.day,
@@ -358,7 +349,6 @@ export default function WorkoutSessionPage() {
         completion_percentage: completionPercentage,
       });
 
-      // Check if this was the last workout of the week
       if (data.isWeekComplete) {
         router.push("/dashboard?showCheckin=true");
       } else {
@@ -383,7 +373,6 @@ export default function WorkoutSessionPage() {
     setSaving(true);
 
     try {
-      // Save skipped workout log
       const response = await fetch("/api/workout/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -406,7 +395,6 @@ export default function WorkoutSessionPage() {
 
       const data = await response.json();
 
-      // Log the skip event
       logEventClient("workout_skipped", {
         day_index: dayIndex,
         workout_day: workout.day,
@@ -415,7 +403,6 @@ export default function WorkoutSessionPage() {
         reason: "user_skipped",
       });
 
-      // Check if this was the last workout of the week
       if (data.isWeekComplete) {
         router.push("/dashboard?showCheckin=true");
       } else {
@@ -431,8 +418,13 @@ export default function WorkoutSessionPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/30">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center animate-pulse">
+            <Dumbbell className="h-7 w-7 text-white" />
+          </div>
+          <Loader2 className="h-5 w-5 animate-spin text-violet-400" />
+        </div>
       </div>
     );
   }
@@ -444,48 +436,49 @@ export default function WorkoutSessionPage() {
     ((currentExerciseIndex + (currentSet - 1) / currentExercise.sets) /
       workout.exercises.length) *
     100;
-  const completedSetsForCurrent =
-    exerciseLogs[currentExerciseIndex]?.completedSets.length || 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5">
+    <div className="min-h-screen bg-slate-950">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-lg border-b">
-        <div className="container mx-auto px-4 py-3">
+      <header className="sticky top-0 z-50 bg-slate-950/90 backdrop-blur-lg border-b border-slate-800/50">
+        <div className="px-4 py-3">
           <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
               onClick={() => setShowExitDialog(true)}
+              className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center"
             >
-              <X className="h-4 w-4 mr-1" />
-              Exit
-            </Button>
+              <X className="h-5 w-5 text-slate-400" />
+            </button>
 
             <div className="text-center">
-              <p className="font-semibold">{workout.day}</p>
-              <p className="text-xs text-muted-foreground">{workout.focus}</p>
+              <p className="font-semibold text-white">{workout.focus}</p>
+              <p className="text-xs text-slate-500">{workout.day}</p>
             </div>
 
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
               onClick={() => setSoundEnabled(!soundEnabled)}
+              className="w-10 h-10 rounded-full bg-slate-800/80 flex items-center justify-center"
             >
               {soundEnabled ? (
-                <Volume2 className="h-4 w-4" />
+                <Volume2 className="h-5 w-5 text-slate-400" />
               ) : (
-                <VolumeX className="h-4 w-4" />
+                <VolumeX className="h-5 w-5 text-slate-600" />
               )}
-            </Button>
+            </button>
           </div>
 
           {/* Progress bar */}
           <div className="mt-3">
-            <Progress value={progressPercent} className="h-2" />
-            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-500 mt-1.5 uppercase tracking-wider">
               <span>
-                Exercise {currentExerciseIndex + 1}/{workout.exercises.length}
+                {currentExerciseIndex + 1} of {workout.exercises.length}{" "}
+                exercises
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -496,357 +489,485 @@ export default function WorkoutSessionPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 max-w-2xl">
-        {/* Warmup Phase */}
-        {phase === "warmup" && (
-          <Card className="border-2 border-orange-500/30 bg-gradient-to-br from-orange-500/10 to-yellow-500/5">
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mb-4">
-                <Flame className="h-8 w-8 text-orange-500" />
+      <main className="px-4 py-6 pb-32">
+        {/* Pre-workout Start Screen */}
+        {phase === "warmup" && timeRemaining === 0 && !isTimerRunning && (
+          <div className="space-y-6">
+            {/* Hero */}
+            <div className="text-center pt-8 pb-4">
+              <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center mb-6 shadow-lg shadow-violet-500/25">
+                <Dumbbell className="h-10 w-10 text-white" />
               </div>
-              <CardTitle className="text-2xl">Warm Up</CardTitle>
-              <p className="text-muted-foreground">
-                Get your body ready for the workout
-              </p>
-            </CardHeader>
-            <CardContent className="text-center space-y-6">
-              {/* Timer Display */}
-              <div className="text-7xl font-mono font-bold tracking-tight">
-                {formatTime(timeRemaining)}
-              </div>
+              <h1 className="text-3xl font-bold text-white mb-2">
+                {workout.focus}
+              </h1>
+              <p className="text-slate-400">{workout.day}'s Workout</p>
+            </div>
 
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <p>• Light cardio (jumping jacks, jogging in place)</p>
-                <p>• Dynamic stretches (arm circles, leg swings)</p>
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-slate-800/50 rounded-2xl p-4 text-center border border-slate-700/40">
+                <Dumbbell className="h-5 w-5 text-violet-400 mx-auto mb-2" />
+                <p className="text-2xl font-bold text-white">
+                  {workout.exercises.length}
+                </p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  Exercises
+                </p>
+              </div>
+              <div className="bg-slate-800/50 rounded-2xl p-4 text-center border border-slate-700/40">
+                <Clock className="h-5 w-5 text-emerald-400 mx-auto mb-2" />
+                <p className="text-2xl font-bold text-white">
+                  {workout.duration_minutes}
+                </p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  Minutes
+                </p>
+              </div>
+              <div className="bg-slate-800/50 rounded-2xl p-4 text-center border border-slate-700/40">
+                <Flame className="h-5 w-5 text-orange-400 mx-auto mb-2" />
+                <p className="text-2xl font-bold text-white">
+                  {workout.exercises.reduce((sum, ex) => sum + ex.sets, 0)}
+                </p>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  Total Sets
+                </p>
+              </div>
+            </div>
+
+            {/* Exercise Preview */}
+            <div className="bg-slate-800/30 rounded-2xl border border-slate-700/40 overflow-hidden">
+              <button
+                onClick={() => setShowExerciseList(!showExerciseList)}
+                className="w-full flex items-center justify-between p-4"
+              >
+                <span className="text-sm font-medium text-slate-300">
+                  Exercise List
+                </span>
+                <ChevronDown
+                  className={`h-5 w-5 text-slate-500 transition-transform ${showExerciseList ? "rotate-180" : ""}`}
+                />
+              </button>
+              {showExerciseList && (
+                <div className="border-t border-slate-700/40 max-h-64 overflow-y-auto">
+                  {workout.exercises.map((ex, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 p-3 border-b border-slate-800/50 last:border-0"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-slate-700/50 flex items-center justify-center text-xs font-bold text-slate-400">
+                        {i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">
+                          {ex.name}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {ex.sets} × {ex.reps || `${ex.duration_seconds}s`}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Coach's Note */}
+            {workout.notes && (
+              <div className="bg-violet-500/10 rounded-2xl p-4 border border-violet-500/20">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-violet-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-violet-300 mb-1">
+                      Coach's Note
+                    </p>
+                    <p className="text-sm text-slate-400">{workout.notes}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="space-y-3 pt-4">
+              <Button
+                onClick={startWarmup}
+                className="w-full h-14 text-lg bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 rounded-2xl"
+              >
+                <Flame className="mr-2 h-5 w-5" />
+                Start with Warmup
+              </Button>
+              <Button
+                onClick={skipWarmup}
+                variant="outline"
+                className="w-full h-12 rounded-2xl border-slate-700 text-slate-300 hover:bg-slate-800"
+              >
+                Skip to Exercises
+              </Button>
+              <button
+                onClick={skipWorkout}
+                disabled={saving}
+                className="w-full text-center text-sm text-slate-500 hover:text-slate-400 py-2"
+              >
+                {saving ? "Saving..." : "Skip Today's Workout"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Warmup Timer */}
+        {phase === "warmup" && (timeRemaining > 0 || isTimerRunning) && (
+          <div className="space-y-8 pt-8">
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center mb-6 shadow-lg shadow-orange-500/25">
+                <Flame className="h-8 w-8 text-white" />
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">Warm Up</h2>
+              <p className="text-slate-400">Get your body ready</p>
+            </div>
+
+            {/* Timer Display */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-b from-orange-500/20 to-transparent rounded-3xl blur-3xl" />
+              <div className="relative bg-slate-800/50 rounded-3xl p-8 border border-slate-700/40">
+                <div className="text-center">
+                  <div className="text-8xl font-mono font-bold text-white tracking-tight">
+                    {formatTime(timeRemaining)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Warmup Tips */}
+            <div className="bg-slate-800/30 rounded-2xl p-4 border border-slate-700/40">
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">
+                Quick Warmup
+              </p>
+              <div className="space-y-2 text-sm text-slate-400">
+                <p>• Light cardio — jumping jacks, jogging in place</p>
+                <p>• Dynamic stretches — arm circles, leg swings</p>
                 <p>• Mobility work for today's target muscles</p>
               </div>
+            </div>
 
-              <div className="flex gap-3 justify-center">
-                <Button size="lg" variant="outline" onClick={skipWarmup}>
-                  Skip Warmup
-                </Button>
-                <Button size="lg" onClick={toggleTimer}>
-                  {isTimerRunning ? (
-                    <Pause className="mr-2 h-5 w-5" />
-                  ) : (
-                    <Play className="mr-2 h-5 w-5" />
-                  )}
-                  {isTimerRunning ? "Pause" : "Start"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            {/* Controls */}
+            <div className="flex gap-3">
+              <Button
+                onClick={skipWarmup}
+                variant="outline"
+                className="flex-1 h-14 rounded-2xl border-slate-700 text-slate-300"
+              >
+                Skip
+              </Button>
+              <Button
+                onClick={toggleTimer}
+                className={`flex-1 h-14 rounded-2xl ${isTimerRunning ? "bg-slate-700" : "bg-orange-500 hover:bg-orange-400"}`}
+              >
+                {isTimerRunning ? (
+                  <Pause className="mr-2 h-5 w-5" />
+                ) : (
+                  <Play className="mr-2 h-5 w-5" />
+                )}
+                {isTimerRunning ? "Pause" : "Resume"}
+              </Button>
+            </div>
+          </div>
         )}
 
         {/* Exercise Phase */}
         {phase === "exercise" && (
           <div className="space-y-6">
-            {/* Current Exercise Card */}
-            <Card className="border-2 border-primary/30 overflow-hidden">
-              <div className="bg-gradient-to-r from-primary/20 to-primary/5 px-6 py-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <Badge variant="secondary" className="mb-2">
-                      Exercise {currentExerciseIndex + 1} of{" "}
-                      {workout.exercises.length}
-                    </Badge>
-                    <h2 className="text-2xl font-bold">
-                      {currentExercise.name}
-                    </h2>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-primary">
-                      Set {currentSet}/{currentExercise.sets}
-                    </div>
-                  </div>
-                </div>
+            {/* Exercise Header */}
+            <div className="bg-gradient-to-br from-violet-600/20 to-indigo-600/10 rounded-3xl p-6 border border-violet-500/20">
+              <div className="flex items-start justify-between mb-4">
+                <span className="text-xs font-medium text-violet-400 bg-violet-500/20 px-2.5 py-1 rounded-full">
+                  Exercise {currentExerciseIndex + 1} of{" "}
+                  {workout.exercises.length}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {currentExercise.rest_seconds}s rest
+                </span>
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-1">
+                {currentExercise.name}
+              </h2>
+              <p className="text-slate-400">
+                {currentExercise.reps
+                  ? `${currentExercise.reps} reps`
+                  : currentExercise.duration_seconds
+                    ? `${currentExercise.duration_seconds} seconds`
+                    : currentExercise.duration_minutes
+                      ? `${currentExercise.duration_minutes} minutes`
+                      : "Complete"}
+              </p>
+            </div>
+
+            {/* Set Tracker */}
+            <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/40">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-slate-400">Set Progress</span>
+                <span className="text-lg font-bold text-white">
+                  {currentSet} / {currentExercise.sets}
+                </span>
               </div>
 
-              <CardContent className="pt-6 space-y-6">
-                {/* Set indicators */}
-                <div className="flex justify-center gap-2">
-                  {Array.from({ length: currentExercise.sets }).map((_, i) => (
+              {/* Set Indicators */}
+              <div className="flex justify-center gap-3 mb-6">
+                {Array.from({ length: currentExercise.sets }).map((_, i) => {
+                  const isCompleted = exerciseLogs[
+                    currentExerciseIndex
+                  ]?.completedSets.includes(i + 1);
+                  const isCurrent = i + 1 === currentSet;
+
+                  return (
                     <div
                       key={i}
-                      className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
-                        exerciseLogs[
-                          currentExerciseIndex
-                        ]?.completedSets.includes(i + 1)
-                          ? "bg-green-500 text-white"
-                          : i + 1 === currentSet
-                            ? "bg-primary text-primary-foreground ring-4 ring-primary/30"
-                            : "bg-muted text-muted-foreground"
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold transition-all ${
+                        isCompleted
+                          ? "bg-emerald-500 text-white"
+                          : isCurrent
+                            ? "bg-violet-500 text-white ring-4 ring-violet-500/30"
+                            : "bg-slate-700/50 text-slate-500"
                       }`}
                     >
-                      {exerciseLogs[
-                        currentExerciseIndex
-                      ]?.completedSets.includes(i + 1) ? (
-                        <CheckCircle2 className="h-5 w-5" />
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-6 w-6" />
                       ) : (
                         i + 1
                       )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
+              </div>
 
-                {/* Rep/Duration info */}
-                <div className="text-center">
-                  <div className="text-5xl font-bold mb-2">
-                    {currentExercise.reps ? (
-                      <>{currentExercise.reps} reps</>
-                    ) : currentExercise.duration_seconds ? (
-                      <>{currentExercise.duration_seconds}s</>
-                    ) : currentExercise.duration_minutes ? (
-                      <>{currentExercise.duration_minutes} min</>
-                    ) : (
-                      "Complete"
-                    )}
-                  </div>
-                  {currentExercise.notes && (
-                    <p className="text-muted-foreground bg-muted/50 rounded-lg p-3 text-sm">
-                      💡 {currentExercise.notes}
-                    </p>
-                  )}
+              {/* Target Display */}
+              <div className="text-center py-4">
+                <div className="text-6xl font-bold text-white mb-2">
+                  {currentExercise.reps ||
+                    currentExercise.duration_seconds ||
+                    currentExercise.duration_minutes}
                 </div>
+                <div className="text-slate-500 uppercase text-sm tracking-wider">
+                  {currentExercise.reps
+                    ? "reps"
+                    : currentExercise.duration_seconds
+                      ? "seconds"
+                      : "minutes"}
+                </div>
+              </div>
+            </div>
 
-                {/* Action buttons */}
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={skipExercise}
-                  >
-                    <SkipForward className="mr-2 h-4 w-4" />
-                    Skip Exercise
-                  </Button>
-                  <Button className="flex-1 h-14 text-lg" onClick={completeSet}>
-                    <CheckCircle2 className="mr-2 h-5 w-5" />
-                    Complete Set
-                  </Button>
+            {/* Notes */}
+            {currentExercise.notes && (
+              <div className="bg-amber-500/10 rounded-2xl p-4 border border-amber-500/20">
+                <div className="flex items-start gap-3">
+                  <Zap className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-300">
+                    {currentExercise.notes}
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <Button
+                onClick={skipExercise}
+                variant="outline"
+                className="flex-1 h-14 rounded-2xl border-slate-700 text-slate-300"
+              >
+                <SkipForward className="mr-2 h-5 w-5" />
+                Skip
+              </Button>
+              <Button
+                onClick={completeSet}
+                className="flex-[2] h-14 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-lg font-semibold"
+              >
+                <CheckCircle2 className="mr-2 h-6 w-6" />
+                Complete Set
+              </Button>
+            </div>
 
             {/* Up Next */}
             {currentExerciseIndex < workout.exercises.length - 1 && (
-              <Card className="bg-muted/30">
-                <CardContent className="py-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-                    Up Next
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">
-                      {workout.exercises[currentExerciseIndex + 1].name}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {workout.exercises[currentExerciseIndex + 1].sets} sets
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="bg-slate-800/30 rounded-2xl p-4 border border-slate-700/40">
+                <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">
+                  Up Next
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-white">
+                    {workout.exercises[currentExerciseIndex + 1].name}
+                  </span>
+                  <span className="text-sm text-slate-500">
+                    {workout.exercises[currentExerciseIndex + 1].sets} sets
+                  </span>
+                </div>
+              </div>
             )}
           </div>
         )}
 
         {/* Rest Phase */}
         {phase === "rest" && (
-          <Card className="border-2 border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-cyan-500/5">
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4">
-                <RotateCcw className="h-8 w-8 text-blue-500" />
+          <div className="space-y-8 pt-4">
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center mb-6 shadow-lg shadow-blue-500/25">
+                <Timer className="h-8 w-8 text-white" />
               </div>
-              <CardTitle className="text-xl">Rest Period</CardTitle>
-              <p className="text-muted-foreground">
+              <h2 className="text-2xl font-bold text-white mb-2">Rest</h2>
+              <p className="text-slate-400">
                 {currentSet < currentExercise.sets
                   ? `Get ready for set ${currentSet + 1}`
-                  : `Get ready for ${workout.exercises[currentExerciseIndex + 1]?.name || "the next exercise"}`}
+                  : `Next: ${workout.exercises[currentExerciseIndex + 1]?.name || "Finish"}`}
               </p>
-            </CardHeader>
-            <CardContent className="text-center space-y-6">
-              {/* Timer Display */}
-              <div
-                className={`text-8xl font-mono font-bold tracking-tight transition-colors ${
-                  timeRemaining <= 5
-                    ? "text-red-500"
-                    : timeRemaining <= 10
-                      ? "text-yellow-500"
-                      : ""
-                }`}
-              >
-                {formatTime(timeRemaining)}
-              </div>
-
-              {/* Timer controls */}
-              <div className="flex gap-2 justify-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addRestTime(-15)}
-                  disabled={timeRemaining < 15}
-                >
-                  -15s
-                </Button>
-                <Button variant="outline" size="icon" onClick={toggleTimer}>
-                  {isTimerRunning ? (
-                    <Pause className="h-4 w-4" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addRestTime(15)}
-                >
-                  +15s
-                </Button>
-              </div>
-
-              <Button size="lg" onClick={skipRest} className="w-full">
-                <SkipForward className="mr-2 h-5 w-5" />
-                Skip Rest
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Pre-workout start screen */}
-        {phase === "warmup" && timeRemaining === 0 && !isTimerRunning && (
-          <div className="text-center space-y-6 py-12">
-            <div className="mx-auto w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center">
-              <Dumbbell className="h-12 w-12 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold mb-2">{workout.day} Workout</h1>
-              <p className="text-muted-foreground text-lg">{workout.focus}</p>
             </div>
 
-            <div className="flex justify-center gap-6 text-sm">
-              <div className="text-center">
-                <div className="text-2xl font-bold">
-                  {workout.exercises.length}
+            {/* Timer Display */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-b from-blue-500/20 to-transparent rounded-3xl blur-3xl" />
+              <div className="relative bg-slate-800/50 rounded-3xl p-8 border border-slate-700/40">
+                <div className="text-center">
+                  <div
+                    className={`text-8xl font-mono font-bold tracking-tight transition-colors ${
+                      timeRemaining <= 5
+                        ? "text-red-400"
+                        : timeRemaining <= 10
+                          ? "text-amber-400"
+                          : "text-white"
+                    }`}
+                  >
+                    {formatTime(timeRemaining)}
+                  </div>
                 </div>
-                <div className="text-muted-foreground">Exercises</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold">
-                  {workout.duration_minutes}
-                </div>
-                <div className="text-muted-foreground">Minutes</div>
               </div>
             </div>
 
-            {workout.notes && (
-              <Card className="bg-muted/50 text-left">
-                <CardContent className="py-4">
-                  <p className="text-sm">
-                    <strong>Coach's Note:</strong> {workout.notes}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="flex flex-col gap-3 items-center pt-4">
-              <div className="flex gap-3">
-                <Button size="lg" variant="outline" onClick={skipWarmup}>
-                  Skip Warmup
-                </Button>
-                <Button size="lg" onClick={startWarmup}>
-                  <Play className="mr-2 h-5 w-5" />
-                  Start Warmup
-                </Button>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={skipWorkout}
+            {/* Timer Controls */}
+            <div className="flex items-center justify-center gap-4">
+              <button
+                onClick={() => addRestTime(-15)}
+                disabled={timeRemaining < 15}
+                className="w-14 h-14 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 hover:bg-slate-700 disabled:opacity-50"
               >
-                <SkipForward className="mr-2 h-4 w-4" />
-                Skip Today's Workout
-              </Button>
+                -15
+              </button>
+              <button
+                onClick={toggleTimer}
+                className="w-16 h-16 rounded-2xl bg-blue-500 flex items-center justify-center text-white hover:bg-blue-400"
+              >
+                {isTimerRunning ? (
+                  <Pause className="h-7 w-7" />
+                ) : (
+                  <Play className="h-7 w-7 ml-1" />
+                )}
+              </button>
+              <button
+                onClick={() => addRestTime(15)}
+                className="w-14 h-14 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 hover:bg-slate-700"
+              >
+                +15
+              </button>
             </div>
+
+            {/* Skip Rest */}
+            <Button
+              onClick={skipRest}
+              className="w-full h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700"
+            >
+              <SkipForward className="mr-2 h-5 w-5" />
+              Skip Rest
+            </Button>
           </div>
         )}
       </main>
 
-      {/* Exit Confirmation Dialog */}
+      {/* Exit Dialog */}
       <Dialog open={showExitDialog} onOpenChange={setShowExitDialog}>
-        <DialogContent>
+        <DialogContent className="bg-slate-900 border-slate-800">
           <DialogHeader>
-            <DialogTitle>Exit Workout?</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-white">Exit Workout?</DialogTitle>
+            <DialogDescription className="text-slate-400">
               Your progress will not be saved. Are you sure you want to exit?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowExitDialog(false)}>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowExitDialog(false)}
+              className="border-slate-700 text-slate-300"
+            >
               Continue Workout
             </Button>
-            <Button variant="destructive" onClick={exitWorkout}>
+            <Button
+              onClick={exitWorkout}
+              className="bg-red-500 hover:bg-red-400"
+            >
               Exit
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Workout Complete Dialog */}
+      {/* Complete Dialog */}
       <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader className="text-center">
-            <div className="mx-auto w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
-              <Trophy className="h-10 w-10 text-green-500" />
+        <DialogContent className="bg-slate-900 border-slate-800 sm:max-w-md">
+          <DialogHeader className="text-center pt-4">
+            <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center mb-4 shadow-lg shadow-emerald-500/25">
+              <Trophy className="h-10 w-10 text-white" />
             </div>
-            <DialogTitle className="text-2xl">Workout Complete! 🎉</DialogTitle>
-            <DialogDescription className="text-base">
-              Amazing work! You crushed your {workout.day} workout.
+            <DialogTitle className="text-2xl text-white">
+              Workout Complete! 🎉
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Amazing work on your {workout.focus} session!
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-3 gap-4 py-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold">
+          <div className="grid grid-cols-3 gap-3 py-6">
+            <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-slate-700/40">
+              <Clock className="h-5 w-5 text-violet-400 mx-auto mb-1" />
+              <p className="text-xl font-bold text-white">
                 {formatTime(totalElapsedTime)}
-              </div>
-              <div className="text-xs text-muted-foreground">Duration</div>
+              </p>
+              <p className="text-[10px] text-slate-500 uppercase">Duration</p>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold">
+            <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-slate-700/40">
+              <Dumbbell className="h-5 w-5 text-emerald-400 mx-auto mb-1" />
+              <p className="text-xl font-bold text-white">
                 {
                   exerciseLogs.filter(
                     (l) => !l.skipped && l.completedSets.length > 0,
                   ).length
                 }
-              </div>
-              <div className="text-xs text-muted-foreground">Exercises</div>
+              </p>
+              <p className="text-[10px] text-slate-500 uppercase">Exercises</p>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold">
+            <div className="bg-slate-800/50 rounded-xl p-3 text-center border border-slate-700/40">
+              <Flame className="h-5 w-5 text-orange-400 mx-auto mb-1" />
+              <p className="text-xl font-bold text-white">
                 {exerciseLogs.reduce(
                   (sum, l) => sum + l.completedSets.length,
                   0,
                 )}
-              </div>
-              <div className="text-xs text-muted-foreground">Sets</div>
+              </p>
+              <p className="text-[10px] text-slate-500 uppercase">Sets</p>
             </div>
           </div>
 
           <DialogFooter>
             <Button
-              className="w-full"
-              size="lg"
               onClick={saveWorkout}
               disabled={saving}
+              className="w-full h-14 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-lg font-semibold"
             >
               {saving ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Saving...
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="mr-2 h-5 w-5" />
-                  Save & Return to Dashboard
+                  <CheckCircle2 className="mr-2 h-6 w-6" />
+                  Save & Continue
                 </>
               )}
             </Button>
